@@ -38,15 +38,12 @@ class Validador_usuarios:
         self.archivo_usuarios = archivo
     
     def validar_usuario(self, user):
-        print("llegamos al validador de usuarios")
         with open(self.archivo_usuarios, 'rb', 0) as file, \
             mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_READ) as s:
             posicion = re.search(br'^' + user.usuario.encode('utf-8') + br';[^\n]*?\n',s)
             if posicion != None:
-                print("usuario encontrado")
                 s.seek(posicion.start()+len(user.usuario)+1)
                 cont = s.readline().strip()
-                print(cont)
                 if cont.decode('utf-8') == user.contrasenia:
                     return True
             return False
@@ -80,13 +77,11 @@ def deserializar_entrada(func):
         deser_args = []
         for i in args:
             if i.__class__ is dict and "clase" in i:
-                print("objeto")
                 deser_args.append(deserializar(i))
             else: deser_args.append(i)
         deser_kwargs = dict()
         for k,v in kwargs.items():
             if v is dict and "clase" in v:
-                print("objeto")
                 deser_kwargs.update({k:deserializar(v)})
             else: deser_kwargs.update({k:v})
         return func(*deser_args,**deser_kwargs)
@@ -121,16 +116,12 @@ class Usuario:
     
     @classmethod
     def deserializar(clc, usuario, contrasenia):
-        print("llegamos al deserializador de Usuario")
-        print("Usuario",usuario," Cont",contrasenia)
         return clc(usuario, contrasenia)
 
 
 Clases = {"Usuario":Usuario, "Lectura":Lectura}
 
 def deserializar(diccionario):
-    print("llegamos a la función deserializar")
-    
     if diccionario.__class__ is not dict:
         raise TypeError("El objeto para deserializar no es un diccionario")
     if "clase" not in diccionario:
