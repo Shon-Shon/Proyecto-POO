@@ -7,7 +7,7 @@ class Cliente;
 
 class Cliente_inter{
 public:
-    void guardarUsuario();
+    void guardarUsuario(std::string usuario, std::string contrasenia);
     bool verificarUsuario();
     int conectarIP();
     void desconectarIP();
