@@ -1,5 +1,4 @@
-//En esta arme la clase Cliente con todas sus funciones y atributos, también armé las funicones para poder
-//enviar archivos y para poder recibir textos muy largos como son el log o el reporte general
+//En esta fui debugeando las funciones usando versiones mock de las funciones del lado del servidor, y por ahora todo anda
 
 #include <utility> // Para std::move
 #include <cstring>
@@ -11,6 +10,7 @@
 #include <prueba_sistema.h>
 #include <fstream>
 #include <sstream>
+//particulares de cada sistema 
 #if defined(PLATFORM_LINUX)
 #include <netinet/in.h>  //Linux
 #include <sys/socket.h> //Linux
@@ -18,6 +18,7 @@
 #elif defined(PLATFORM_WINDOWS)
 #include <Ws2tcpip.h>  //Windows
 #include <winsock2.h>  //Windows
+#include <windows.h>
 #endif
 
 //JsonRpc
@@ -33,6 +34,8 @@ de sus funciones para tratar con ese valor, excepto cuando la función devuelve 
 del programador escribir si esa referencia será de tipo r-value reference o l-value reference, lo más común es
 devolverr l-value reference.
 */
+
+const unsigned int tiempo_timeout = 100;
 
 class Cliente;
 class Lectura;
@@ -263,22 +266,46 @@ int Cliente::conectarSerie(){
 void Cliente::desconectarSerie(){
     jsonRequest = client.BuildNotificationData("desconectarSerie");
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
+    //eliminar
+    #ifdef PLATFORM_WINDOWS
+    Sleep(100);
+    #else
+    usleep(static_cast<int>(100000)); //100 ms = 100 000 us 
+    #endif
 }
 
 void Cliente::selecModo(const char modo){
     //código para seleccionar modo
     jsonRequest = client.BuildNotificationData("selecModo", std::string(1, modo));
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
+    //eliminar
+    #ifdef PLATFORM_WINDOWS
+    Sleep(100);
+    #else
+    usleep(static_cast<int>(100000)); //100 ms = 100 000 us 
+    #endif
 }
 
 void Cliente::encenderMotor(){
     jsonRequest = client.BuildNotificationData("encenderMotor");
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);    
+    //eliminar
+    #ifdef PLATFORM_WINDOWS
+    Sleep(100);
+    #else
+    usleep(static_cast<int>(100000)); //100 ms = 100 000 us 
+    #endif
 }
 
 void Cliente::apagarMotor(){
     jsonRequest = client.BuildNotificationData("apagarMotor");
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
+    //eliminar
+    #ifdef PLATFORM_WINDOWS
+    Sleep(100);
+    #else
+    usleep(static_cast<int>(100000)); //100 ms = 100 000 us 
+    #endif
 }
 
 std::string Cliente::moverXYZ(double x, double y, double z){
@@ -312,6 +339,12 @@ std::string Cliente::moverXYZ(double x, double y, double z, double v){
 void Cliente::home(){
     jsonRequest = client.BuildNotificationData("home");
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
+    //eliminar
+    #ifdef PLATFORM_WINDOWS
+    Sleep(100);
+    #else
+    usleep(static_cast<int>(100000)); //100 ms = 100 000 us 
+    #endif
 }
 
 int Cliente::enviarArchivo(const std::string& nombreArchivo, bool sobreescribir){
@@ -320,12 +353,8 @@ int Cliente::enviarArchivo(const std::string& nombreArchivo, bool sobreescribir)
         std::cerr << "No se pudo abrir el archivo para leer." << std::endl;
         return -1;
     }
-    
-    if (sobreescribir == true)
-        jsonRequest = client.BuildRequestData("enviarArchivo", nombreArchivo, sobreescribir);
-    else
-        jsonRequest = client.BuildRequestData("enviarArchivo", nombreArchivo);
-    
+
+    jsonRequest = client.BuildRequestData("enviarArchivo", nombreArchivo, sobreescribir);    
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
     
     int bytesRecibidos = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
@@ -336,8 +365,8 @@ int Cliente::enviarArchivo(const std::string& nombreArchivo, bool sobreescribir)
         return -1;
     }
     jsonrpc::Response parsedResponse = client.ParseResponse(buffer);
-    if (parsedResponse.GetResult().AsInteger32() == 1){
-        return 1;
+    if (parsedResponse.GetResult().AsInteger32() > 0){
+        return parsedResponse.GetResult().AsInteger32();
     }
     
     while (inFile.read(buffer, bufferSize) || inFile.gcount() > 0) {
@@ -345,13 +374,25 @@ int Cliente::enviarArchivo(const std::string& nombreArchivo, bool sobreescribir)
         //Construimos un pedido a la función seguir_enviando
         jsonRequest = client.BuildNotificationData("seguir_enviando", std::string(buffer, bytesLeidos));
         send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
+        //eliminar
+        #ifdef PLATFORM_WINDOWS
+        Sleep(100);
+        #else
+        usleep(static_cast<int>(100000)); //100 ms = 100 000 us 
+        #endif
     }
     
     jsonRequest = client.BuildNotificationData("terminar_de_enviar");
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
+    //eliminar
+    #ifdef PLATFORM_WINDOWS
+    Sleep(100);
+    #else
+    usleep(static_cast<int>(100000)); //100 ms = 100 000 us 
+    #endif
     
     //inFile.close();
-    std::cout << "Archivo enviado." << std::endl;
+    //std::cout << "Archivo enviado." << std::endl;
     return 0;
 }
 
@@ -378,12 +419,37 @@ std::string Cliente::pedirLog(){
     
     int bytesRecibidos;
     std::ostringstream oss;
-    while ((bytesRecibidos = recv(clientSocket, buffer, bufferSize, 0)) > 0) {
-        oss.write(buffer, bytesRecibidos);
-    }
     
-    if (bytesRecibidos < 0) {
-        std::cerr << "Error al recibir datos." << strerror(errno) << std::endl;
+    fd_set readfds;
+    struct timeval timeout;
+    while (true) {
+        FD_ZERO(&readfds);
+        FD_SET(clientSocket, &readfds);
+        // Configura el timeout
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 100000; //100 ms
+        
+        int activity = select(clientSocket + 1, &readfds, nullptr, nullptr, &timeout);
+        if (activity < 0) {
+            std::cerr << "Error en select: " << strerror(errno) << std::endl;
+            break;
+        } else if (activity == 0) {
+            // Timeout alcanzado, consideramos que recibimos todo
+            break;
+        } else {
+            // Hay datos para recibir
+            bytesRecibidos = recv(clientSocket, buffer, sizeof(buffer), 0);
+            if (bytesRecibidos > 0) {
+                oss.write(buffer, bytesRecibidos);
+            } else if (bytesRecibidos < 0) {
+                std::cerr << "Error al recibir datos: " << strerror(errno) << std::endl;
+                break;
+            } else {
+                // La conexión se cerró
+                std::cout << "La conexion se cerro." << std::endl;
+                break;
+            }
+        }
     }
     
     jsonrpc::Response parsedResponse = client.ParseResponse(oss.str());
@@ -397,12 +463,36 @@ std::string Cliente::pedirRegistro(){
     
     int bytesRecibidos;
     std::ostringstream oss;
-    while ((bytesRecibidos = recv(clientSocket, buffer, bufferSize, 0)) > 0) {
-        oss.write(buffer, bytesRecibidos);
-    }
-    
-    if (bytesRecibidos < 0) {
-        std::cerr << "Error al recibir datos." << strerror(errno) << std::endl;
+    fd_set readfds;
+    struct timeval timeout;
+    while (true) {
+        FD_ZERO(&readfds);
+        FD_SET(clientSocket, &readfds);
+        // Configura el timeout
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 100000; //100 ms
+        
+        int activity = select(clientSocket + 1, &readfds, nullptr, nullptr, &timeout);
+        if (activity < 0) {
+            std::cerr << "Error en select: " << strerror(errno) << std::endl;
+            break;
+        } else if (activity == 0) {
+            // Timeout alcanzado, consideramos que recibimos todo
+            break;
+        } else {
+            // Hay datos para recibir
+            bytesRecibidos = recv(clientSocket, buffer, sizeof(buffer), 0);
+            if (bytesRecibidos > 0) {
+                oss.write(buffer, bytesRecibidos);
+            } else if (bytesRecibidos < 0) {
+                std::cerr << "Error al recibir datos: " << strerror(errno) << std::endl;
+                break;
+            } else {
+                // La conexión se cerró
+                std::cout << "La conexion se cerro." << std::endl;
+                break;
+            }
+        }
     }
     
     jsonrpc::Response parsedResponse = client.ParseResponse(oss.str());
