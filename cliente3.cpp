@@ -1,14 +1,16 @@
-
-//En esta agregué serialización y deserializador de objetos Lectura y Usuario que había implementado en mockcliente.cpp cuando
-// aún no sabía como usar sockets en windows
+//En esta arme la clase Cliente con todas sus funciones y atributos, también armé las funicones para poder
+//enviar archivos y para poder recibir textos muy largos como son el log o el reporte general
 
 #include <utility> // Para std::move
 #include <cstring>
+#include <cerrno>
 #include <string>
 #include <iostream>
 #include <unistd.h>
 #include <memory>
 #include <prueba_sistema.h>
+#include <fstream>
+#include <sstream>
 #if defined(PLATFORM_LINUX)
 #include <netinet/in.h>  //Linux
 #include <sys/socket.h> //Linux
@@ -21,7 +23,6 @@
 //JsonRpc
 #include <jsonrpc-lean/client.h>
 
-
 /* aprendizajes:
 Las funciones no pueden distinguir entre literales y constantes, si a una función que acepta punteros modificables le das
 un puntero a un array constante (como un literal), algunos compiladores te darán un error, PERO OTROS NO, así que
@@ -33,6 +34,60 @@ del programador escribir si esa referencia será de tipo r-value reference o l-v
 devolverr l-value reference.
 */
 
+class Cliente;
+class Lectura;
+class Usuario;
+
+class Cliente{
+public:
+    int conectarIP();
+    void desconectarIP();
+    
+    void guardarUsuario(std::string usuario, std::string contrasenia);
+    bool verificarUsuario();
+    int conectarSerie();
+    void desconectarSerie();
+    
+    void selecModo(char modo);
+    
+    void encenderMotor();
+    void apagarMotor();
+    std::string moverXYZ(double x, double y, double z);
+    std::string moverXYZ(double x, double y, double z, double v);
+    void home();
+    
+    //archivos modo automatico
+    int enviarArchivo(const std::string& nombreArchivo, bool sobreescribir = false);
+    int ejecutarArchivo(const std::string& nombreArchivo);
+    
+    //reportes
+    std::string pedirLog();
+    std::string pedirRegistro();
+    
+    Cliente();
+    
+private:
+    //socket
+    #ifdef PLATFORM_WINDOWS
+    WSADATA wsaData;
+    #endif
+    int clientSocket;
+    bool conectadoIP = 0;
+    char buffer[1024];
+    char buffer_salida[1024];
+    const int bufferSize = 1024;
+    
+    //jsonrpc
+    std::unique_ptr<jsonrpc::FormatHandler> formatHandler;
+    jsonrpc::Client client;
+    jsonrpc::Request::Parameters params;
+    std::shared_ptr<jsonrpc::FormattedData> jsonRequest;
+    
+    //usuario
+    std::unique_ptr<Usuario> usuario_guardado;
+};
+
+
 
 std::string CharToStr(char *entrada){std::string str(entrada); return str;}
 
@@ -40,6 +95,7 @@ class Usuario{
     std::string usuario;
     std::string contrasenia;
     
+public:
     Usuario(std::string _usuario, std::string _constrasenia): usuario(_usuario), contrasenia(_constrasenia){}
     
     Usuario(Usuario&& otro) noexcept{
@@ -64,7 +120,7 @@ class Usuario{
         atributos["usuario"]=this->usuario;
         atributos["contrasenia"]=this->contrasenia;
         objeto["atributos"]=atributos;
-        return objeto;
+        return objeto; //Aquí el compilador aplicará RVO para construir 'objeto' en la dirección de destino de esta función
     }
 };
 
@@ -90,27 +146,12 @@ public:
     }
     
     static Lectura deserializar(const jsonrpc::Value& valor){
-        //std::cout<<"Es Struct (valor): " << valor.IsStruct() <<std::endl;
         auto mapa = valor.AsStruct();
         if (!(mapa["clase"].AsString()=="Lectura")){throw std::domain_error( "se recibio un objeto de clase erronea");}
-        //std::cout<<"Es Struct (atributos): " << mapa["atributos"].IsStruct() <<std::endl;
         auto atributos = mapa["atributos"].AsStruct();
         Lectura instancia(0,"");
-        // Aquí asumiendo que `mapa` tiene los datos necesarios
-        //std::cout<< "numero en atributos: "<< ((atributos.find("numero") == atributos.end())? false:true) <<std::endl;
-        //std::cout<< "tiempo en atributos: "<< ((atributos.find("tiempo") == atributos.end())? false:true) <<std::endl;
-        //std::cout<< "numero es int32: "<<atributos["numero"].IsInteger32()<<std::endl;
-        //std::cout<< "tiempo es string: "<<atributos["tiempo"].IsString()<<std::endl;
         instancia.numero = atributos["numero"].AsInteger32();
-        //std::cout<<"convercion correcta de numero"<<std::endl;
         instancia.tiempo = atributos["tiempo"].AsString();
-        //std::cout<<"convercion correcta de tiempo"<<std::endl
-
-        //Prueba con el formato de fecha
-        //std::istringstream flujo(instancia.tiempo);
-        //std::tm prueba = {};
-        //flujo>>std::get_time(&prueba, "%a %b %d %H:%M:%S %Y");
-        //std::cout<<prueba.tm_hour<<":"<<prueba.tm_min<<":"<<prueba.tm_sec<<std::endl;
         return instancia;
     }
 };
@@ -125,33 +166,38 @@ jsonrpc::Value serializarObjeto(T& objeto) {
     return objeto.serializar();
 }
 
-int main()
-{
+//Funciones de clases
+
+///////////////Cliente/////////////////
+
+Cliente::Cliente():
+        formatHandler(std::make_unique<jsonrpc::JsonFormatHandler>()),
+        client(*formatHandler) //client no tiene operador de asignación, así que hay que usar el constructor acá
+        {}
+
+int Cliente::conectarIP(){
     #ifdef PLATFORM_WINDOWS
-    WSADATA wsaData; //windows
+    //WSADATA wsaData; //windows
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) { //windows
         std::cerr << "Fallo al iniciar WSAStartup." << std::endl;
         return 1;
     }
     #endif
-
-
+    
     // creating socket
-    int clientSocket = socket(AF_INET, SOCK_STREAM, 0);
+    clientSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (clientSocket == INVALID_SOCKET) {
         std::cerr << "Fallo en la creacion del socket." << std::endl;
         WSACleanup(); //windows
         return 1;
     }
     
-    //const char addRequest[] = "{\"jsonrpc\":\"2.0\",\"method\":\"add\",\"id\":0,\"params\":[3,2]}";
-    
     // dirección a la que vamos a conectarnos
     sockaddr_in serverAddress;
     serverAddress.sin_family = AF_INET;
     serverAddress.sin_port = htons(5000);
     serverAddress.sin_addr.s_addr = inet_addr("127.0.0.1");
-
+    
     // intentamos conectarnos
     if (connect(clientSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR) {
         std::cerr << "Fallo al conectar." << std::endl;
@@ -162,91 +208,10 @@ int main()
         return 1;
     }
     
-    //jsonrpc
-    std::unique_ptr<jsonrpc::FormatHandler> formatHandler(new jsonrpc::JsonFormatHandler());
-    jsonrpc::Client client(*formatHandler);
-    
-    std::cout<<"--------------------------\n";
-    // enviar pedido de procesamiento
-    jsonrpc::Request::Parameters params;
-    {
-        jsonrpc::Value::Struct a;
-        a["x"]=3;
-        a["y"]=2;
-        params.push_back(std::move(a));
-    }
-    std::shared_ptr<jsonrpc::FormattedData> jsonRequest = client.BuildRequestData("add", params);
-    //params.clear();
-    std::cout<< "Se envio: " <<jsonRequest->GetData()<<std::endl;
-    send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
-    //recibir la respuesta
-    char buffer[1024];
-    int bytesRecibidos = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
-    if (bytesRecibidos > 0) {
-        buffer[bytesRecibidos] = '\0'; // Asegúrate de terminar la cadena
-    } else {
-        std::cerr << "Fallo en la recepcion del mensaje." << std::endl;
-    }
-    std::cout<< "Se recibio: " <<CharToStr(buffer) <<std::endl;
-    //parsear y mostrar
-    jsonrpc::Response parsedResponse = client.ParseResponse(buffer);
-    std::cout << "Parsed response: " << parsedResponse.GetResult().AsInteger32() << std::endl;
-    
-    
-    std::cout<<"--------------------------\n";
-    jsonRequest=client.BuildRequestData("subtract", 2, 3); //.reset(client.BuildRequestData("substract", 2, 3));
-    std::cout<< "Se envio: " <<jsonRequest->GetData()<<std::endl;
-    send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
-    bytesRecibidos = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
-    if (bytesRecibidos > 0) {
-        buffer[bytesRecibidos] = '\0'; // Asegúrate de terminar la cadena
-    } else {
-        std::cerr << "Fallo en la recepcion del mensaje." << std::endl;
-    }
-    std::cout<< "Se recibio: " <<CharToStr(buffer) <<std::endl;
-    parsedResponse = client.ParseResponse(buffer);
-    std::cout << "Parsed response: " << parsedResponse.GetResult().AsInteger32() << std::endl;
-    
-    
-    std::cout<<"--------------------------\n";
-    jsonRequest=client.BuildRequestData("medir"); //.reset(client.BuildRequestData("substract", 2, 3));
-    std::cout<< "Se envio: " <<jsonRequest->GetData()<<std::endl;
-    send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
-    bytesRecibidos = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
-    if (bytesRecibidos > 0) {
-        buffer[bytesRecibidos] = '\0'; // Asegúrate de terminar la cadena
-    } else {
-        std::cerr << "Fallo en la recepcion del mensaje." << std::endl;
-    }
-    std::cout<< "Se recibio: " <<CharToStr(buffer) <<std::endl;
-    parsedResponse = client.ParseResponse(buffer);
-    Lectura lect(0,"");
-    deserializarObjeto(lect,parsedResponse.GetResult());
-    std::cout << "Parsed response:\n" "numero: "<< lect.numero <<"\ntiempo: " << lect.tiempo << std::endl;
-    
-    std::cout<<"--------------------------\n";
-    params.clear();
-    {
-        jsonrpc::Value::Struct a;
-        a["x"]=3;
-        a["y"]=2;
-        params.push_back(std::move(a));
-        jsonrpc::Value::Struct b;
-        params.push_back(std::move(b));
-    }
-    jsonRequest=client.BuildRequestData("printear", params); //.reset(client.BuildRequestData("substract", 2, 3));
-    std::cout<< "Se envio: " <<jsonRequest->GetData()<<std::endl;
-    send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
-    bytesRecibidos = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
-    if (bytesRecibidos > 0) {
-        buffer[bytesRecibidos] = '\0'; // Asegúrate de terminar la cadena
-    } else {
-        std::cerr << "Fallo en la recepcion del mensaje." << std::endl;
-    }
-    std::cout<< "Se recibio: " <<CharToStr(buffer) <<std::endl;
-    parsedResponse = client.ParseResponse(buffer);
-    std::cout << "Parsed response: " << parsedResponse.GetResult().AsString() << std::endl;
-    
+    return 0;
+}
+
+void Cliente::desconectarIP(){
     // cerrar socket
     #ifdef PLATFORM_WINDOWS
     closesocket(clientSocket);//windows
@@ -254,7 +219,192 @@ int main()
     #else
     close(clientSocket); //linux
     #endif
+}
 
+void Cliente::guardarUsuario(std::string usuario, std::string contrasenia){
+    usuario_guardado = std::make_unique<Usuario>(usuario, contrasenia);
+}
 
+bool Cliente::verificarUsuario(){
+    if (usuario_guardado==nullptr) throw std::runtime_error("No se ha guardado ningun usuario aun");
+    jsonRequest = client.BuildRequestData("validar_usuario", serializarObjeto(*usuario_guardado));
+    
+    //std::cout<< "Se envio: " <<jsonRequest->GetData()<<std::endl;
+    send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
+    
+    int bytesRecibidos = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+    if (bytesRecibidos > 0) {
+        buffer[bytesRecibidos] = '\0'; // Asegúrate de terminar la cadena
+    } else {
+        std::cerr << "Fallo en la recepcion del mensaje:" << strerror(errno) << std::endl;
+    }
+    //std::cout<< "Se recibio: " <<CharToStr(buffer) <<std::endl;
+    jsonrpc::Response parsedResponse = client.ParseResponse(buffer);
+    return parsedResponse.GetResult().AsBoolean();
+}
+
+//////Funciones con el robot////////
+
+int Cliente::conectarSerie(){
+    jsonRequest = client.BuildRequestData("conectarSerie");
+    send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
+    
+    int bytesRecibidos = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+    if (bytesRecibidos > 0) {
+        buffer[bytesRecibidos] = '\0'; // Asegúrate de terminar la cadena
+    } else {
+        std::cerr << "Fallo en la recepcion del mensaje:" << strerror(errno) << std::endl;
+        return -1;
+    }
+    jsonrpc::Response parsedResponse = client.ParseResponse(buffer);
+    return parsedResponse.GetResult().AsInteger32();
+}
+
+void Cliente::desconectarSerie(){
+    jsonRequest = client.BuildNotificationData("desconectarSerie");
+    send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
+}
+
+void Cliente::selecModo(const char modo){
+    //código para seleccionar modo
+    jsonRequest = client.BuildNotificationData("selecModo", std::string(1, modo));
+    send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
+}
+
+void Cliente::encenderMotor(){
+    jsonRequest = client.BuildNotificationData("encenderMotor");
+    send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);    
+}
+
+void Cliente::apagarMotor(){
+    jsonRequest = client.BuildNotificationData("apagarMotor");
+    send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
+}
+
+std::string Cliente::moverXYZ(double x, double y, double z){
+    jsonRequest = client.BuildRequestData("moverXYZ", x, y, z);
+    send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
+    
+    int bytesRecibidos = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+    if (bytesRecibidos > 0) {
+        buffer[bytesRecibidos] = '\0'; // Asegúrate de terminar la cadena
+    } else {
+        std::cerr << "Fallo en la recepcion del mensaje:" << strerror(errno) << std::endl;
+    }
+    jsonrpc::Response parsedResponse = client.ParseResponse(buffer);
+    return parsedResponse.GetResult().AsString();
+}
+
+std::string Cliente::moverXYZ(double x, double y, double z, double v){
+    jsonRequest = client.BuildRequestData("moverXYZ", x, y, z, v);
+    send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
+    
+    int bytesRecibidos = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+    if (bytesRecibidos > 0) {
+        buffer[bytesRecibidos] = '\0'; // Asegúrate de terminar la cadena
+    } else {
+        std::cerr << "Fallo en la recepcion del mensaje:" << strerror(errno) << std::endl;
+    }
+    jsonrpc::Response parsedResponse = client.ParseResponse(buffer);
+    return parsedResponse.GetResult().AsString();
+}
+
+void Cliente::home(){
+    jsonRequest = client.BuildNotificationData("home");
+    send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
+}
+
+int Cliente::enviarArchivo(const std::string& nombreArchivo, bool sobreescribir){
+    std::ifstream inFile(nombreArchivo, std::ios::binary);
+    if (!inFile) {
+        std::cerr << "No se pudo abrir el archivo para leer." << std::endl;
+        return -1;
+    }
+    
+    if (sobreescribir == true)
+        jsonRequest = client.BuildRequestData("enviarArchivo", nombreArchivo, sobreescribir);
+    else
+        jsonRequest = client.BuildRequestData("enviarArchivo", nombreArchivo);
+    
+    send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
+    
+    int bytesRecibidos = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+    if (bytesRecibidos > 0) {
+        buffer[bytesRecibidos] = '\0'; // Asegúrate de terminar la cadena
+    } else {
+        std::cerr << "Fallo en la recepcion del mensaje:" << strerror(errno) << std::endl;
+        return -1;
+    }
+    jsonrpc::Response parsedResponse = client.ParseResponse(buffer);
+    if (parsedResponse.GetResult().AsInteger32() == 1){
+        return 1;
+    }
+    
+    while (inFile.read(buffer, bufferSize) || inFile.gcount() > 0) {
+        size_t bytesLeidos = inFile.gcount();
+        //Construimos un pedido a la función seguir_enviando
+        jsonRequest = client.BuildNotificationData("seguir_enviando", std::string(buffer, bytesLeidos));
+        send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
+    }
+    
+    jsonRequest = client.BuildNotificationData("terminar_de_enviar");
+    send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
+    
+    //inFile.close();
+    std::cout << "Archivo enviado." << std::endl;
     return 0;
+}
+
+
+int Cliente::ejecutarArchivo(const std::string& nombreArchivo){
+    jsonRequest = client.BuildRequestData("ejecutarArchivo", nombreArchivo);
+    send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
+    
+    int bytesRecibidos = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+    if (bytesRecibidos > 0) {
+        buffer[bytesRecibidos] = '\0'; // Asegúrate de terminar la cadena
+    } else {
+        std::cerr << "Fallo en la recepcion del mensaje:" << strerror(errno) << std::endl;
+        return -1;
+    }
+    jsonrpc::Response parsedResponse = client.ParseResponse(buffer);
+    return parsedResponse.GetResult().AsInteger32();
+}
+
+
+std::string Cliente::pedirLog(){
+    jsonRequest = client.BuildRequestData("pedirLog");
+    send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
+    
+    int bytesRecibidos;
+    std::ostringstream oss;
+    while ((bytesRecibidos = recv(clientSocket, buffer, bufferSize, 0)) > 0) {
+        oss.write(buffer, bytesRecibidos);
+    }
+    
+    if (bytesRecibidos < 0) {
+        std::cerr << "Error al recibir datos." << strerror(errno) << std::endl;
+    }
+    
+    jsonrpc::Response parsedResponse = client.ParseResponse(oss.str());
+    return parsedResponse.GetResult().AsString();
+}
+
+
+std::string Cliente::pedirRegistro(){
+    jsonRequest = client.BuildRequestData("pedirRegistro");
+    send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
+    
+    int bytesRecibidos;
+    std::ostringstream oss;
+    while ((bytesRecibidos = recv(clientSocket, buffer, bufferSize, 0)) > 0) {
+        oss.write(buffer, bytesRecibidos);
+    }
+    
+    if (bytesRecibidos < 0) {
+        std::cerr << "Error al recibir datos." << strerror(errno) << std::endl;
+    }
+    
+    jsonrpc::Response parsedResponse = client.ParseResponse(oss.str());
+    return parsedResponse.GetResult().AsString();
 }
