@@ -2,32 +2,81 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include "clientecpp.h"
 
 class Robot {
 private:
-    bool conectado; // estado de la conexión
-    bool modo; // <false: modo manual, true: modo automático>
-
+    int estadoIP; //0 para conectado, 1 para desconectado
+    int estadoSerie; //0 para conectado, 1 para desconetado
+    char modo; // "m" para manual, "a" para automatico
+    Cliente* cliente;
 public:
-    // Constructor
-    Robot() : conectado(false), modo(false) {}
+    / Robot() : estadoIP(1), estadoSerie(1), modo('m') {} //inicializamos con todo desconetado y en modo manual
 
-    void conectar(const std::string& ip) { // Corrige el tipo a std::string
-        if (!conectado) {
-            conectado = true;
-            std::cout << "Conectado a " << ip << std::endl;
+    ~Robot() {
+        if (cliente != nullptr) { delete cliente; } 
+    }
+
+    void conectarIP() { // Corrige el tipo a std::string
+        if (estadoIP==0){
+            std::cout<<"Ya esta conectado a la IP"<<std::endl;
         } else {
-            std::cout << "Ya está conectado." << std::endl;
+            if(cliente==nullptr){
+                cliente = new Cliente();
+            }
+            estadoIP=cliente->conectarIP();
+            if (estadoIP==0){
+                std::cout<<"Se conectó a la IP exitosamente"<<std::endl;
+            } else {
+                std::cout<<"Se produjo un error al conectar la IP"<<std::endl;
+            }
         }
     }
-    void desconectar(){
-        if(conectado){
-            conectado=false;
-            std::cout << "Se ha desconectado"<<std::endl;
+
+    void desconectarIP() {
+        if (estadoIP==1){
+            std::cout<<"Ya esta desconectado a la IP"<<std::endl;
         } else {
-            std::cout << "Ya está desconectado"<< std::endl;
+            if(cliente==nullptr){
+                cliente = new Cliente();
+            }
+            cliente->desconectarIP();
+            if (estadoIP==1){
+                std::cout<<"Se desconectó a la IP exitosamente"<<std::endl;
+            } else {
+                std::cout<<"Se produjo un error al desconectar la IP"<<std::endl;
+            }
         }
     }
+
+    void conectarSerie() { // No entiendo que valores devuelve conectarSerie
+            if (cliente == nullptr) {
+                 cliente = new Cliente();
+            }
+            int estadoSerie = cliente->conectarSerie();
+            if (estadoSerie== 0) {
+                std::cout << "Conexión al puerto serie exitosa." << std::endl;
+            } else {
+                std::cout << "Fallo en la conexión al puerto serie." << std::endl;
+        }
+    }
+    
+    void desconectarSerie() { // Corrige el tipo a std::string
+        if (estadoSerie==1){
+            std::cout<<"Ya esta desconectado del pueto Serie"<<std::endl;
+        } else {
+            if(cliente==nullptr){
+                cliente = new Cliente();
+            }
+            cliente->desconectarIP();
+            if (estadoSerie==1){
+                std::cout<<"Se desconectó del pueto Serie exitosamente"<<std::endl;
+            } else {
+                std::cout<<"Se produjo un error al desconectar del puerto Serie"<<std::endl;
+            }
+        }
+    }
+
 
     void selecModo(char modoInput) {
         if (modoInput == 'a') {
@@ -64,8 +113,6 @@ public:
         std::cout << "Seleccionar modo: selecModo (a: automático, m: manual)" << std::endl;
         std::cout << "Mostrar reporte: reporteGeneral" << std::endl;
         std::cout << "Log de Trabajo del Servidor: reporteLog" << std::endl;
-        std::cout << "Grabar órdenes: grabarOrdenes <nombre_archivo>" << std::endl;
-        std::cout << "Terminar grabación: detenerGrabacion" << std::endl;
         std::cout << "--------------------------------------------------------------" << std::endl;
     }
 
