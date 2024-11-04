@@ -2,23 +2,19 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <memory>
 #include "clientecpp.h"
 
 class Robot {
 private:
     int estadoIP; //0 para conectado, 1 para desconectado
-    int estadoSerie; //0 para conectado, 1 para desconetado
+    int estadoSerie; //0 para conectado, 1 para desconectado
     char modo; // "m" para manual, "a" para automatico
-    Cliente* cliente;
+    std::unique_ptr<Cliente> cliente;
 public:
     // Constructor
-    Robot() : estadoIP(1), estadoSerie(1), modo('m') {
-        cliente= new Cliente();
-    } //inicializamos con todo desconetado y en modo manual
-
-    ~Robot() {
-        if (cliente != nullptr) { delete cliente; } 
-    }
+    Robot() : estadoIP(1), estadoSerie(1), modo('m'),  cliente(std::make_unique<Cliente>()) {
+    } //inicializamos con todo desconectado y en modo manual
 
     bool usuarioContrasenia(const std::string& user, const std::string& pass){
         cliente->guardarUsuario(user,pass);
@@ -26,7 +22,7 @@ public:
         return sec;
     }
 
-    void conectarIP() { // Corrige el tipo a std::string
+    int conectarIP() { // Corrige el tipo a std::string
         if (estadoIP==0){
             std::cout<<"Ya esta conectado a la IP"<<std::endl;
         } else {
@@ -37,9 +33,10 @@ public:
                 std::cout<<"Se produjo un error al conectar la IP"<<std::endl;
             }
         }
+        return estadoIP;
     }
 
-    void desconectarIP() { // Corrige el tipo a std::string
+    int desconectarIP() { // Corrige el tipo a std::string
         if (estadoIP==1){
             std::cout<<"Ya esta desconectado a la IP"<<std::endl;
         } else {
@@ -47,9 +44,10 @@ public:
             estadoIP=1;
             std::cout<<"Se desconectó de la IP"<<std::endl;
         }
+        return estadoIP;
     }
 
-    void conectarSerie() { // No entiendo que valores devuelve conectarSerie
+    void conectarSerie() { 
             estadoSerie = cliente->conectarSerie();
             if (estadoSerie== 0) {
                 std::cout << "Conexión al puerto serie exitosa" << std::endl;
@@ -60,7 +58,7 @@ public:
     
     void desconectarSerie() { // Corrige el tipo a std::string
         if (estadoSerie==1){
-            std::cout<<"Ya esta desconectado del pueto Serie"<<std::endl;
+            std::cout<<"Ya esta desconectado del puerto Serie"<<std::endl;
         } else {
             cliente->desconectarIP();
             estadoSerie=1;
@@ -69,77 +67,82 @@ public:
     }
 
     void selecModo(char modoI) {
-        bool modovalido = false;
-        while (!modovalido) {
-            if (modoI == modo) {
-                if (modoI == 'm') {
-                    modovalido = true;
-                    std::cout << "Ya se encuentra en modo manual." << std::endl;
-                } else if (modoI == 'a') {
-                    modovalido = true;
-                    std::cout << "Ya se encuentra en modo automático." << std::endl;
-                }
-            } else if (modoI == 'a') {
-                modovalido = true;
-                cliente->selecModo(modoI);
-                modo = modoI;
-                std::cout << "Se cambió a modo automático." << std::endl;
-                std::string nombreArchivo;
-                std::cout << "Ingrese el nombre del archivo para enviar: ";
-                std::cin >> nombreArchivo;
-                bool sobreescribir;
-                std::cout << "¿Desea sobreescribir el archivo en el destino? (1 para sí, 0 para no): ";
-                std::cin >> sobreescribir;
-                int resultadoEnvio = cliente->enviarArchivo(nombreArchivo, sobreescribir);
-                if (resultadoEnvio == 0) {
-                    std::cout << "Archivo enviado exitosamente." << std::endl;
-                    int resultadoEjecucion = cliente->ejecutarArchivo(nombreArchivo);
-                    if (resultadoEjecucion == 0) {
-                        std::cout << "Archivo ejecutado exitosamente." << std::endl;
-                    } else {
-                        std::cout << "Error al ejecutar el archivo." << std::endl;
-                    }
-                } else {
-                    std::cout << "Error al enviar el archivo." << std::endl;
-                }
-            } else if (modoI == 'm') {
-                modovalido = true;
-                bool m = false;
-                double x, y, z, vel;
-                char flag;
-                cliente->selecModo(modoI);
-                modo = modoI;
-                std::cout << "Se cambió a modo manual." << std::endl;
-                std::cout << "Ingrese la posición final que debe tomar el robot y la velocidad (opcional)." << std::endl;
-                while (!m) {
-                    std::cout << "Ingrese x: ";
-                    std::cin >> x;
-                    std::cout << "Ingrese y: ";
-                    std::cin >> y;
-                    std::cout << "Ingrese z: ";
-                    std::cin >> z;
-                    bool flagValida = false;
-                    while (!flagValida) {
-                        std::cout << "¿Desea especificar velocidad? Y/N: ";
-                        std::cin >> flag;
-                        if (flag == 'Y' || flag == 'y') {
-                            std::cout << "Ingrese velocidad: ";
-                            std::cin >> vel;
-                            cliente->moverXYZ(x, y, z, vel);
-                            flagValida = true;
-                        } else if (flag == 'N' || flag == 'n') {
-                            cliente->moverXYZ(x, y, z);
-                            flagValida = true;
-                        } else {
-                            std::cout << "La opción no es válida. Intente nuevamente." << std::endl;
-                        }
-                    }
-                } 
-            } else { 
-                std::cout << modoI << " no es un modo válido." << std::endl; 
-            } 
+        if (modoI != 'a' && modoI != 'm') {
+            std::cout << modoI << " no es un modo válido. Use 'a' para automático o 'm' para manual." << std::endl;
+            return;
+        }
+
+        if (modoI == modo) {
+            std::cout << "El modo ya está en " << (modo == 'a' ? "automático." : "manual.") << std::endl;
+            return;
+        }
+
+        cliente->selecModo(modoI);
+        modo = modoI;
+
+        if (modoI == 'a') {
+            std::cout << "Cambiado a modo automático." << std::endl;
+            modoAutomatico();
+        } else {
+            std::cout << "Cambiado a modo manual." << std::endl;
+            modoManual();
         }
     }
+
+    void modoAutomatico() {
+    std::string nombreArchivo;
+    std::cout << "Ingrese el nombre del archivo para enviar: ";
+    std::cin >> nombreArchivo;
+    bool sobreescribir;
+    std::cout << "¿Desea sobreescribir el archivo en el destino? (1 para sí, 0 para no): ";
+    std::cin >> sobreescribir;
+    int resultadoEnvio = cliente->enviarArchivo(nombreArchivo, sobreescribir);
+    if (resultadoEnvio == 0) {
+        std::cout << "Archivo enviado exitosamente." << std::endl;
+        int resultadoEjecucion = cliente->ejecutarArchivo(nombreArchivo);
+        if (resultadoEjecucion == 0) {
+            std::cout << "Archivo ejecutado exitosamente." << std::endl;
+        } else {
+            std::cout << "Error al ejecutar el archivo." << std::endl;
+        }
+    } else {
+        std::cout << "Error al enviar el archivo." << std::endl;
+    }
+}
+
+    void modoManual() {
+    double x, y, z, vel;
+    char flag;
+    while (true) {
+        std::cout << "Ingrese x: ";
+        std::cin >> x;
+        std::cout << "Ingrese y: ";
+        std::cin >> y;
+        std::cout << "Ingrese z: ";
+        std::cin >> z;
+
+        std::cout << "¿Desea especificar velocidad? (Y/N): ";
+        std::cin >> flag;
+        if (flag == 'Y' || flag == 'y') {
+            std::cout << "Ingrese velocidad: ";
+            std::cin >> vel;
+            cliente->moverXYZ(x, y, z, vel);
+        } else if (flag == 'N' || flag == 'n') {
+            cliente->moverXYZ(x, y, z);
+        } else {
+            std::cout << "Opción no válida, intente de nuevo." << std::endl;
+            continue;
+        }
+        
+        char continuar;
+        std::cout << "¿Desea mover el robot a otra posición? (Y/N): ";
+        std::cin >> continuar;
+        if (continuar == 'N' || continuar == 'n') {
+            break;
+        }
+    }
+}
+
 
     std::string pedirLog(){
         return cliente->pedirLog();
@@ -150,7 +153,7 @@ public:
 
     void encenderMotor() {
         cliente->encenderMotor();
-        std::cout<<"Motod encendido"<<std::endl;
+        std::cout<<"Motor encendido"<<std::endl;
     }
 
     void apagarMotor() {
@@ -166,8 +169,10 @@ public:
     void mostrarAyuda() {
         std::cout << "Ordenes disponibles:" << std::endl;
         std::cout << "help" << std::endl;
-        std::cout << "man: Manual de uso" << std::endl;
+        std::cout << "Manual de uso: man" << std::endl;
         std::cout << "Conectar a IP: conectarIP" << std::endl;
+        std::cout << "Desonectar a IP: desconectarIP" << std::endl;
+        std::cout << "Ingresar con Usuario y Contrasenia: logIn" << std::endl;
         std::cout << "Conectar puerto serie: conectarSerie" << std::endl;
         std::cout << "Desconectar de puerto serie: desconectarSerie" << std::endl;
         std::cout << "Encender motores: encenderMotor" << std::endl;
@@ -175,6 +180,7 @@ public:
         std::cout << "Seleccionar modo: selecModo (a: automático, m: manual)" << std::endl;
         std::cout << "Mostrar reporte: reporteGeneral" << std::endl;
         std::cout << "Log de Trabajo del Servidor: pedirLog" << std::endl;
+        std::cout << "Home: home" << std::endl;
         std::cout << "--------------------------------------------------------------" << std::endl;
     }
 
@@ -199,38 +205,45 @@ public:
 
 int main() {
     Robot robot;
-    std::string comando;
+    std::string comando, usuario,contrasena;
     bool sec=false;
-    std::string usuario,contrasena;
     char modo;
+    int estadoIP=1;
 
-    while (!sec) {
-        std::cout << "Ingrese usuario: ";
-        std::cin >> usuario;
-        std::cout << "Ingrese contraseña: ";
-        std::cin >> contrasena;
-        sec = robot.usuarioContrasenia(usuario, contrasena);
-        if (!sec) { std::cout << "Usuario o contraseña incorrectos. Intente nuevamente." << std::endl;
-        } else {
-            std::cout<<"Se ingresó de manera correcta"<<std::endl;
-        }
-    }
-    // Simulación de inicio de sesión
-    
 
-    // Bucle principal de la interfaz
     while (true) {
-        std::cout << ">> ";
+        std::cout << ">>> ";
         std::cin >> comando;
 
         if (comando == "man") {
             robot.mostrarMan();
         } else if (comando == "help") {
             robot.mostrarAyuda();
+        } else if (comando=="conectarIP") {
+            estadoIP=robot.conectarIP();
+        } else if (comando=="desconectarIP"){
+            estadoIP=robot.desconectarIP();
         } else if (comando == "conectarSerie"){
-            robot.conectarIP();
+            robot.conectarSerie();
         } else if (comando == "desconectarSerie"){
-            robot.desconectarSerie();
+            robot.desconectarSerie(); 
+        }else if(comando=="logIn"){
+            if (estadoIP==0){
+                while (!sec) {
+                    std::cout << "Ingrese usuario: ";
+                    std::cin >> usuario;
+                    std::cout << "Ingrese contraseña: ";
+                    std::cin >> contrasena;
+                    sec = robot.usuarioContrasenia(usuario, contrasena);
+                    if (!sec) {
+                        std::cout << "Usuario o contraseña incorrectos. Intente nuevamente." << std::endl;
+                    } else {
+                        std::cout<<"Se ingresó de manera correcta"<<std::endl;
+                    }
+                } 
+            } else{
+                std::cout<<"Para logearse necesita estar conectado al servido IP"<<std::endl;
+            }
         }else if (comando == "selecModo") {
             std::cin >> modo;
             robot.selecModo(modo);
