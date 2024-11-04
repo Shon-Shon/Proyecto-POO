@@ -3,16 +3,13 @@
 
 #include <string>
 
-class Cliente;
-
-class Cliente_inter{
+class Cliente{
 public:
-    void guardarUsuario(std::string usuario, std::string contrasenia);
-    bool verificarUsuario();
     int conectarIP();
     void desconectarIP();
     
-    //robot
+    void guardarUsuario(std::string usuario, std::string contrasenia);
+    bool verificarUsuario();
     int conectarSerie();
     void desconectarSerie();
     
@@ -25,15 +22,14 @@ public:
     void home();
     
     //archivos modo automatico
-    int cargarArchivo(std::string nombre);
-    int ejecutarArchivo(std::string nombre);
+    int enviarArchivo(const std::string& nombreArchivo, bool sobreescribir = false);
+    int ejecutarArchivo(const std::string& nombreArchivo);
     
     //reportes
     std::string pedirLog();
     std::string pedirRegistro();
     
-private:
-    Cliente* cliente;
+    Cliente();
 };
 
 #endif //CLIENTE_CPP_H
