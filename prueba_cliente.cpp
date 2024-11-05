@@ -4,8 +4,8 @@
 
 int main()
 {
-    std::cout << "Conectando IP..." << std::endl;
     Cliente* cliente = new Cliente();
+    std::cout << "Conectando IP..." << std::endl;
     cliente->conectarIP();
     
     std::cout<<"--------------------------\n";
@@ -17,17 +17,9 @@ int main()
     std::cout<<"Orden: conectarSerie()"<<std::endl;
     int prueba2 = cliente->conectarSerie();
     std::cout << "Parsed response: " << prueba2 << std::endl;
-    std::cout<<"Orden: desconectarSerie()"<<std::endl;
-    cliente->desconectarSerie();
     
-    std::cout<<"Orden: selecModo('a')"<<std::endl;
-    cliente->selecModo('a');
-    std::cout<<"Orden: selecModo('m')"<<std::endl;
-    cliente->selecModo('m');
     std::cout<<"Orden: encenderMotor()"<<std::endl;
     cliente->encenderMotor();
-    std::cout<<"Orden: apagarMotor()"<<std::endl;
-    cliente->apagarMotor();
     
     std::cout<<"Orden: moverXYZ(1,2,3)"<<std::endl;
     std::string prueba3 = cliente->moverXYZ(1.0, 2.0, 3.0); //con x,y,z
@@ -38,6 +30,9 @@ int main()
     
     std::cout<<"Orden: home()"<<std::endl;
     cliente->home();
+    
+    std::cout<<"Orden: selecModo('a')"<<std::endl;
+    cliente->selecModo('a');
     
     std::cout<<"Orden: enviarArchivo(\"archivo_prueba.gcode\")"<<std::endl; 
     int prueba5 = cliente->enviarArchivo("archivo_prueba.gcode"); //Este debería andar normal y devolver 0
@@ -62,6 +57,15 @@ int main()
     std::cout<<"Orden: pedirRegistro()"<<std::endl;
     std::string prueba11 = cliente->pedirRegistro(); //devuelve un string muy largo
     std::cout << "Parsed response: " << prueba11 << std::endl;
+    
+    std::cout<<"Orden: selecModo('m')"<<std::endl;
+    cliente->selecModo('m');
+    
+    std::cout<<"Orden: apagarMotor()"<<std::endl;
+    cliente->apagarMotor();
+    
+    std::cout<<"Orden: desconectarSerie()"<<std::endl;
+    cliente->desconectarSerie();
     
     cliente->desconectarIP();
 
