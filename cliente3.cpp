@@ -1,5 +1,3 @@
-//En esta fui debugeando las funciones usando versiones mock de las funciones del lado del servidor, y por ahora todo anda
-
 #include <utility> // Para std::move
 #include <cstring>
 #include <cerrno>
@@ -25,17 +23,13 @@
 #include <jsonrpc-lean/client.h>
 
 /* aprendizajes:
-Las funciones no pueden distinguir entre literales y constantes, si a una función que acepta punteros modificables le das
-un puntero a un array constante (como un literal), algunos compiladores te darán un error, PERO OTROS NO, así que
-si tratás con arrays y se supone que tu función debe poder modificarlos conviene crear una sobrecarga para punteros
-a constantes que lance un error con certeza sin importar el compilador.
-Los valores que devuelve una función son r-values, y de tenerlo la clase a la que le asignas ese valor usará la versión move
-de sus funciones para tratar con ese valor, excepto cuando la función devuelve una referencia, en ese caso es deber
-del programador escribir si esa referencia será de tipo r-value reference o l-value reference, lo más común es
-devolverr l-value reference.
+Por alguna razón este modulo solo anda si construis Cliente en un puntero como
+Clinete* cliente = new Cliente();
+No si lo intentas construir en una variable normal
 */
 
 const unsigned int tiempo_timeout = 100;
+//#define DEBUG
 
 class Cliente;
 class Lectura;
@@ -176,9 +170,16 @@ jsonrpc::Value serializarObjeto(T& objeto) {
 Cliente::Cliente():
         formatHandler(std::make_unique<jsonrpc::JsonFormatHandler>()),
         client(*formatHandler) //client no tiene operador de asignación, así que hay que usar el constructor acá
-        {}
+{
+    #ifdef DEBUG
+    std::cout<<"Cliente()"<<std::endl;
+    #endif
+}
 
 int Cliente::conectarIP(){
+    #ifdef DEBUG
+    std::cout<<"conectarIP()"<<std::endl;
+    #endif
     #ifdef PLATFORM_WINDOWS
     //WSADATA wsaData; //windows
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) { //windows
@@ -189,9 +190,15 @@ int Cliente::conectarIP(){
     
     // creating socket
     clientSocket = socket(AF_INET, SOCK_STREAM, 0);
+    #ifdef PLATFORM_WINDOWS
     if (clientSocket == INVALID_SOCKET) {
-        std::cerr << "Fallo en la creacion del socket." << std::endl;
+    #else
+    if (clientSocket == -1) {
+    #endif
+        std::cerr << "Fallo en la creación del socket: " << std::strerror(errno) << std::endl;
+        #ifdef PLATFORM_WINDOWS
         WSACleanup(); //windows
+        #endif
         return 1;
     }
     
@@ -201,20 +208,29 @@ int Cliente::conectarIP(){
     serverAddress.sin_port = htons(5000);
     serverAddress.sin_addr.s_addr = inet_addr("127.0.0.1");
     
-    // intentamos conectarnos
+    // intentamos conectarnos WSAGetLastError()
+    #ifdef PLATFORM_WINDOWS
     if (connect(clientSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR) {
-        std::cerr << "Fallo al conectar." << std::endl;
+        std::cerr << "Fallo al conectar: " << std::strerror(WSAGetLastError()) << std::endl;
         closesocket(clientSocket);
-        #ifdef PLATFORM_WINDOWS
         WSACleanup(); //windows
-        #endif
         return 1;
     }
+    #else
+    if (connect(clientSocket, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) < 0) {
+        std::cerr << "Fallo al conectar: " << std::strerror(errno) << std::endl;
+        close(clientSocket); // Usar close en Unix
+        return 1;
+    }
+    #endif
     
     return 0;
 }
 
 void Cliente::desconectarIP(){
+    #ifdef DEBUG
+    std::cout<<"desconectarIP()"<<std::endl;
+    #endif
     // cerrar socket
     #ifdef PLATFORM_WINDOWS
     closesocket(clientSocket);//windows
@@ -225,10 +241,16 @@ void Cliente::desconectarIP(){
 }
 
 void Cliente::guardarUsuario(std::string usuario, std::string contrasenia){
+    #ifdef DEBUG
+    std::cout<<"guardarUsuario("+usuario+", "+contrasenia+")"<<std::endl;
+    #endif
     usuario_guardado = std::make_unique<Usuario>(usuario, contrasenia);
 }
 
 bool Cliente::verificarUsuario(){
+    #ifdef DEBUG
+    std::cout<<"verificarUsuario()"<<std::endl;
+    #endif
     if (usuario_guardado==nullptr) throw std::runtime_error("No se ha guardado ningun usuario aun");
     jsonRequest = client.BuildRequestData("validar_usuario", serializarObjeto(*usuario_guardado));
     
@@ -249,6 +271,9 @@ bool Cliente::verificarUsuario(){
 //////Funciones con el robot////////
 
 int Cliente::conectarSerie(){
+    #ifdef DEBUG
+    std::cout<<"conectarSerie()"<<std::endl;
+    #endif
     jsonRequest = client.BuildRequestData("conectarSerie");
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
     
@@ -264,6 +289,9 @@ int Cliente::conectarSerie(){
 }
 
 void Cliente::desconectarSerie(){
+    #ifdef DEBUG
+    std::cout<<"desconectarSerie()"<<std::endl;
+    #endif
     jsonRequest = client.BuildNotificationData("desconectarSerie");
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
     //eliminar
@@ -275,6 +303,9 @@ void Cliente::desconectarSerie(){
 }
 
 void Cliente::selecModo(const char modo){
+    #ifdef DEBUG
+    std::cout<<"selecModo("+std::string(1,modo)+")"<<std::endl;
+    #endif
     //código para seleccionar modo
     jsonRequest = client.BuildNotificationData("selecModo", std::string(1, modo));
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
@@ -287,6 +318,9 @@ void Cliente::selecModo(const char modo){
 }
 
 void Cliente::encenderMotor(){
+    #ifdef DEBUG
+    std::cout<<"encenderMotor()"<<std::endl;
+    #endif
     jsonRequest = client.BuildNotificationData("encenderMotor");
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);    
     //eliminar
@@ -298,6 +332,9 @@ void Cliente::encenderMotor(){
 }
 
 void Cliente::apagarMotor(){
+    #ifdef DEBUG
+    std::cout<<"apagarMotor()"<<std::endl;
+    #endif
     jsonRequest = client.BuildNotificationData("apagarMotor");
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
     //eliminar
@@ -309,6 +346,9 @@ void Cliente::apagarMotor(){
 }
 
 std::string Cliente::moverXYZ(double x, double y, double z){
+    #ifdef DEBUG
+    std::cout<<"moverXYZ("<<x<<","<<y<<","<<z<<")"<<std::endl;
+    #endif
     jsonRequest = client.BuildRequestData("moverXYZ", x, y, z);
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
     
@@ -323,6 +363,9 @@ std::string Cliente::moverXYZ(double x, double y, double z){
 }
 
 std::string Cliente::moverXYZ(double x, double y, double z, double v){
+    #ifdef DEBUG
+    std::cout<<"moverXYZ("<<x<<","<<y<<","<<z<<","<<v<<")"<<std::endl;
+    #endif
     jsonRequest = client.BuildRequestData("moverXYZ", x, y, z, v);
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
     
@@ -337,6 +380,9 @@ std::string Cliente::moverXYZ(double x, double y, double z, double v){
 }
 
 void Cliente::home(){
+    #ifdef DEBUG
+    std::cout<<"home()"<<std::endl;
+    #endif
     jsonRequest = client.BuildNotificationData("home");
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
     //eliminar
@@ -348,6 +394,9 @@ void Cliente::home(){
 }
 
 int Cliente::enviarArchivo(const std::string& nombreArchivo, bool sobreescribir){
+    #ifdef DEBUG
+    std::cout<<"enviarArchivo("+nombreArchivo+","<<(sobreescribir?"true":"false")<<")"<<std::endl;
+    #endif
     std::ifstream inFile(nombreArchivo, std::ios::binary);
     if (!inFile) {
         std::cerr << "No se pudo abrir el archivo para leer." << std::endl;
@@ -398,6 +447,9 @@ int Cliente::enviarArchivo(const std::string& nombreArchivo, bool sobreescribir)
 
 
 int Cliente::ejecutarArchivo(const std::string& nombreArchivo){
+    #ifdef DEBUG
+    std::cout<<"ejecutarArchivo("+nombreArchivo+")"<<std::endl;
+    #endif
     jsonRequest = client.BuildRequestData("ejecutarArchivo", nombreArchivo);
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
     
@@ -414,6 +466,9 @@ int Cliente::ejecutarArchivo(const std::string& nombreArchivo){
 
 
 std::string Cliente::pedirLog(){
+    #ifdef DEBUG
+    std::cout<<"pedirLog()"<<std::endl;
+    #endif
     jsonRequest = client.BuildRequestData("pedirLog");
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
     
@@ -458,6 +513,9 @@ std::string Cliente::pedirLog(){
 
 
 std::string Cliente::pedirRegistro(){
+    #ifdef DEBUG
+    std::cout<<"pedirRegistro()"<<std::endl;
+    #endif
     jsonRequest = client.BuildRequestData("pedirRegistro");
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
     
