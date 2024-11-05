@@ -6,7 +6,12 @@ import time
 import functools
 import mmap
 import re
+import os
+#Este hay que sacarlo después
+import inspect
+from Comunicacion_Controlador import ArduinoSerialController
 
+DEBUG=False
 
 def unpack_dict(func):
     @functools.wraps(func)
@@ -38,6 +43,7 @@ class Validador_usuarios:
         self.archivo_usuarios = archivo
     
     def validar_usuario(self, user):
+        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
         with open(self.archivo_usuarios, 'rb', 0) as file, \
             mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_READ) as s:
             posicion = re.search(br'^' + user.usuario.encode('utf-8') + br';[^\n]*?\n',s)
@@ -59,34 +65,6 @@ def serializar_salida(func):
         return valor if es_builtin(valor) else valor.serializar()
         #ser_kwargs = dict((k,v.serializado()) for k,v in kwargs.items())
     return wrapper_serializado
-
-"""
-def deserializar(serializado):
-    if not serializado.__class__ is dict: raise TypeError("Solo se puede serializar diccionarios")
-    if (not "clase" in serializado) or (not "atributos" in serializado):
-        raise ValueError("Falta atributo \"clase\" con nombre de clase o atributo \"atributos\" con conjunto de los atributos")
-    if not serializado["clase"].__class__ is str: raise TypeError("\"clase\" debe ser string")
-    if not serializado["clase"].__class__ is str: raise TypeError("\"atributos\" debe ser string")
-    if any([(not x.__class__ is str) for x in serializado["atributos"]]): raise TypeError("nombre de atributos debe ser string")
-    #
-    return globals()[serializado["clase"]].deserializar(serializado["atributos"])
-
-def deserializar_entrada(func):
-    @functools.wraps(func)
-    def wrapper_deserializar_entrada(*args, **kwargs):
-        deser_args = []
-        for i in args:
-            if i.__class__ is dict and "clase" in i:
-                deser_args.append(deserializar(i))
-            else: deser_args.append(i)
-        deser_kwargs = dict()
-        for k,v in kwargs.items():
-            if v is dict and "clase" in v:
-                deser_kwargs.update({k:deserializar(v)})
-            else: deser_kwargs.update({k:v})
-        return func(*deser_args,**deser_kwargs)
-    return wrapper_deserializar_entrada
-"""
 
 class Lectura:
     def __init__(self, numero, tiempo):
@@ -122,6 +100,7 @@ class Usuario:
 Clases = {"Usuario":Usuario, "Lectura":Lectura}
 
 def deserializar(diccionario):
+    
     if diccionario.__class__ is not dict:
         raise TypeError("El objeto para deserializar no es un diccionario")
     if "clase" not in diccionario:
@@ -157,11 +136,134 @@ def printear(*args):
     print(salida)
     return salida
 
-validador = Validador_usuarios()
+
+class Servidor:
+    def __init__(self, puertoSerie="COM6"):
+        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        self.validador = Validador_usuarios
+        self.controlador = ArduinoSerialController(puertoSerie)
+        self.modo = "m"
+        self.archivo = None
+        self.nombre_archivo = ''
+        self.log = []
+        self.registro = []
+    
+    def selecModo(self, modo_deseado):
+        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        self.modo = modo_deseado
+    
+    def conectarSerie(self):
+        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        if not self.controlador.connection:
+            self.controlador.connect()
+        if not self.controlador.connection:
+            return 1
+        return 0
+    
+    def desconectarSerie(self):
+        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        self.controlador.disconnect()
+        self.controlador.connection = None
+    
+    def encenderMotor(self):
+        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        #print("¡Brum Brum!")
+        orden = self.controlador.comando_encenderMotor()
+        respuesta = self.controlador.send_gcode(orden)
+        
+    def apagarMotor(self):
+        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        #print("PIIUuuu..")
+        orden = self.controlador.comando_apagarMotor()
+        respuesta = self.controlador.send_gcode(orden)
+    
+    def moverXYZ(self, x,y,z,v=-1):
+        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        if v==-1: v=2
+        orden = self.controlador.comando_moverXYZ(x,y,z,v)
+        respuesta = self.controlador.send_gcode(orden)
+        return "".join(respuesta)
+    
+    def home(self):
+        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        orden = self.controlador.comando_home()
+        respuesta = self.controlador.send_gcode(orden)
+    
+    def actGripper(self):
+        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        orden = self.controlador.comando_actGripper()
+        respuesta = self.controlador.send_gcode(orden)
+        
+    def deactGripper(self):
+        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        orden = self.controlador.comando_deactGripper()
+        respuesta = self.controlador.send_gcode(orden)
+    
+    def recibirArchivo(nombreArchivo, sobreescribir=False):
+        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        if self.archivo != None: return 2
+        if os.path.splitext(nombre_archivo)[1] != ".gcode":
+            return 3
+        direccion = os.path.join("ejecutables",nombre_archivo)
+        if os.path.isfile(direccion) and sobreescribir==False:
+            return 1
+        self.nombreArchivo = nombreArchivo.decode()
+        self.archivo = open(nombre_archivo, 'wb')
+    
+    def seguir_recibiendo_archivo(fragmento):
+        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        #Acá hay que verificar que el archivo exista y esté abierto
+        self.archivo.write(fragmento)
+        
+    def terminar_recibir_archivo(self):
+        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        if self.archivo:
+            self.archivo.close()
+        self.archivo = None
+    
+    def ejecutarArchivo(nombreArchivo):
+        print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        if "." not in nombre_archivo: nombreArchivo += ".gcode"
+        direccion = os.path.join("ejecutables",nombreArchivo)
+        if not os.path.isfile(direccion):
+            return 1
+        with open(direccion, "r") as archivo
+            orden = archivo.readline().strip()
+            #resultado = "\n".join(self.controlador.send_gcode(orden))
+            resultado = "Lalala"
+            if "ERROR" in resultado:
+                return 2
+    return 0
+    
+    def pedirLog(self):
+        #return "\n".join(self.log)
+        return "A"
+    
+    def pedirRegistro(self):
+        #return "\n".join(self.log)
+        return "A"
+    
+    def registrar_funciones(despachador):
+        despachador.add_method(deserializar_entrada(self.validador.validar_usuario))
+        despachador.add_method(self.selecModo)
+        despachador.add_method(self.conectarSerie)
+        despachador.add_method(self.desconectarSerie)
+        despachador.add_method(self.encenderMotor)
+        despachador.add_method(self.apagarMotor)
+        despachador.add_method(self.moverXYZ)
+        despachador.add_method(self.home)
+        despachador.add_method(self.actGripper)
+        despachador.add_method(self.deactGripper)
+        despachador.add_method(unpack_dict(self.recibirArchivo), name="enviarArchivo")
+        despachador.add_method(self.seguir_recibiendo_archivo, name="seguir_enviando")
+        despachador.add_method(self.terminar_recibir_archivo, name="terminar_de_enviar")
+        despachador.add_method(self.ejecutarArchivo)
+        despachador.add_method(self.pedirLog)
+        despachador.add_method(self.pedirRegistro)
+
 
 despachador.add_method( serializar_salida(unpack_dict( Lectura.medir )), name="medir" )
 despachador.add_method( unpack_dict( printear ) )
-despachador.add_method( deserializar_entrada(validador.validar_usuario), name="validar_usuario")
 
 # Configuración del servidor
 HOST = '127.0.0.1'
@@ -170,7 +272,9 @@ PORT = 5000
 def handle_request(data):
     # Procesar la solicitud JSON-RPC
     response = JSONRPCResponseManager.handle(data, despachador)
-    return response.data
+    if response:
+        return response.data
+    return None
 
 # Crear el socket del servidor
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -184,10 +288,14 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     with conn:
         print(f'Conectado a {addr}')
         while True:
-            data = conn.recv(1024).decode('utf-8')
+            data = conn.recv(2048).decode('utf-8')
             if not data:
                 break
-
+            
+            print("------------")
+            print(data)
             # Manejar la solicitud y enviar respuesta
             response = handle_request(data)
-            conn.sendall(json.dumps(response).encode('utf-8'))
+            print(response)
+            if response:
+                conn.sendall(json.dumps(response).encode('utf-8'))
