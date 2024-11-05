@@ -9,9 +9,12 @@ import re
 import os
 #Este hay que sacarlo después
 import inspect
-from Comunicacion_Controlador import ArduinoSerialController
+import Comunicacion_Controlador
 
-DEBUG=False
+DEBUG=True
+
+log=[]
+registro=[]
 
 def unpack_dict(func):
     @functools.wraps(func)
@@ -19,8 +22,8 @@ def unpack_dict(func):
         #revisamos el último parámetro posicional para ver si es un diccionario
         if args and isinstance(args[-1], dict):
             kwargs.update(args[-1])  #actualizamos kwargs con el diccionario
-            return func(*args[:-1], **kwargs)    #llamamos a la función sin el diccionario final en args
-        return func(*args, **kwargs)  #llamamos a la función normalmente
+            return func(*args[:-1], **kwargs)    #llamamos a la funcion sin el diccionario final en args
+        return func(*args, **kwargs)  #llamamos a la funcion normalmente
     return wrapper
 
 
@@ -43,7 +46,7 @@ class Validador_usuarios:
         self.archivo_usuarios = archivo
     
     def validar_usuario(self, user):
-        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
         with open(self.archivo_usuarios, 'rb', 0) as file, \
             mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_READ) as s:
             posicion = re.search(br'^' + user.usuario.encode('utf-8') + br';[^\n]*?\n',s)
@@ -51,7 +54,9 @@ class Validador_usuarios:
                 s.seek(posicion.start()+len(user.usuario)+1)
                 cont = s.readline().strip()
                 if cont.decode('utf-8') == user.contrasenia:
+                    log.append(f"Accedio el usuario {user.usuario}")
                     return True
+            log.append(f"Se intento acceder con la cuenta de {user.usuario}")
             return False
 
 def es_builtin(obj): return isinstance(obj, (int, float, str, list, dict, set, tuple, bool, bytes))
@@ -65,6 +70,7 @@ def serializar_salida(func):
         return valor if es_builtin(valor) else valor.serializar()
         #ser_kwargs = dict((k,v.serializado()) for k,v in kwargs.items())
     return wrapper_serializado
+
 
 class Lectura:
     def __init__(self, numero, tiempo):
@@ -139,9 +145,9 @@ def printear(*args):
 
 class Servidor:
     def __init__(self, puertoSerie="COM6"):
-        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
-        self.validador = Validador_usuarios
-        self.controlador = ArduinoSerialController(puertoSerie)
+        if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
+        self.validador = Validador_usuarios()
+        self.controlador = Comunicacion_Controlador.ArduinoSerialController(puertoSerie)
         self.modo = "m"
         self.archivo = None
         self.nombre_archivo = ''
@@ -149,102 +155,128 @@ class Servidor:
         self.registro = []
     
     def selecModo(self, modo_deseado):
-        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
+        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}({modo_deseado})")
         self.modo = modo_deseado
     
     def conectarSerie(self):
-        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
+        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
         if not self.controlador.connection:
             self.controlador.connect()
         if not self.controlador.connection:
+            registro.append("Error: 1")
             return 1
         return 0
     
     def desconectarSerie(self):
-        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
+        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
         self.controlador.disconnect()
         self.controlador.connection = None
     
     def encenderMotor(self):
-        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
+        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
         #print("¡Brum Brum!")
         orden = self.controlador.comando_encenderMotor()
         respuesta = self.controlador.send_gcode(orden)
         
     def apagarMotor(self):
-        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
+        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
         #print("PIIUuuu..")
         orden = self.controlador.comando_apagarMotor()
         respuesta = self.controlador.send_gcode(orden)
     
     def moverXYZ(self, x,y,z,v=-1):
-        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
+        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}({x},{y},{z},{v})")
         if v==-1: v=2
         orden = self.controlador.comando_moverXYZ(x,y,z,v)
         respuesta = self.controlador.send_gcode(orden)
         return "".join(respuesta)
     
     def home(self):
-        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
+        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
         orden = self.controlador.comando_home()
         respuesta = self.controlador.send_gcode(orden)
     
     def actGripper(self):
-        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
+        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
         orden = self.controlador.comando_actGripper()
         respuesta = self.controlador.send_gcode(orden)
         
     def deactGripper(self):
-        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
+        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
         orden = self.controlador.comando_deactGripper()
         respuesta = self.controlador.send_gcode(orden)
     
-    def recibirArchivo(nombreArchivo, sobreescribir=False):
-        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
-        if self.archivo != None: return 2
+    def recibirArchivo(self, nombre_archivo, sobreescribir=False):
+        if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
+        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}({nombre_archivo},{sobreescribir})")
+        if self.archivo != None:
+            registro.append("Error: 2")
+            return 2
         if os.path.splitext(nombre_archivo)[1] != ".gcode":
+            registro.append("Error: 3")
             return 3
-        direccion = os.path.join("ejecutables",nombre_archivo)
+        direccion = os.path.join("G_Codes",nombre_archivo)
         if os.path.isfile(direccion) and sobreescribir==False:
+            registro.append("Warning: 1")
             return 1
-        self.nombreArchivo = nombreArchivo.decode()
-        self.archivo = open(nombre_archivo, 'wb')
+        self.nombreArchivo = nombre_archivo
+        self.archivo = open(direccion, 'wb')
+        return 0
     
-    def seguir_recibiendo_archivo(fragmento):
-        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+    def seguir_recibiendo_archivo(self, fragmento):
+        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}([fragmento de archivo])")
+        if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
+        fragmento_bin = fragmento.encode()
         #Acá hay que verificar que el archivo exista y esté abierto
-        self.archivo.write(fragmento)
+        self.archivo.write(fragmento_bin)
         
     def terminar_recibir_archivo(self):
-        if DEBUG: print("Se ejecutó",inspect.currentframe().f_code.co_name)
+        if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
+        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
         if self.archivo:
             self.archivo.close()
         self.archivo = None
     
-    def ejecutarArchivo(nombreArchivo):
-        print("Se ejecutó",inspect.currentframe().f_code.co_name)
-        if "." not in nombre_archivo: nombreArchivo += ".gcode"
-        direccion = os.path.join("ejecutables",nombreArchivo)
+    def ejecutarArchivo(self, nombre_archivo):
+        if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
+        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}({nombre_archivo})")
+        if "." not in nombre_archivo: nombre_archivo += ".gcode"
+        direccion = os.path.join("G_Codes",nombre_archivo)
         if not os.path.isfile(direccion):
+            registro.append("Error: 1")
             return 1
-        with open(direccion, "r") as archivo
+        with open(direccion, "r") as archivo:
             orden = archivo.readline().strip()
-            #resultado = "\n".join(self.controlador.send_gcode(orden))
-            resultado = "Lalala"
+            resultado = "\n".join(self.controlador.send_gcode(orden))
+            #resultado = "Lalala"
             if "ERROR" in resultado:
+                registro.append("Error: 2")
                 return 2
-    return 0
+        return 0
     
     def pedirLog(self):
-        #return "\n".join(self.log)
-        return "A"
+        if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
+        registro.append(f"Se ejecuto{inspect.currentframe().f_code.co_name}")
+        return "\n".join(log)
     
     def pedirRegistro(self):
-        #return "\n".join(self.log)
-        return "A"
+        if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
+        salida = "\n".join(registro)
+        registro.append(f"Se ejecuto{inspect.currentframe().f_code.co_name}")
+        return salida
     
-    def registrar_funciones(despachador):
-        despachador.add_method(deserializar_entrada(self.validador.validar_usuario))
+    def registrar_funciones(self, despachador):
+        if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
+        despachador.add_method(deserializar_entrada(self.validador.validar_usuario), name="validar_usuario")
         despachador.add_method(self.selecModo)
         despachador.add_method(self.conectarSerie)
         despachador.add_method(self.desconectarSerie)
@@ -265,7 +297,11 @@ class Servidor:
 despachador.add_method( serializar_salida(unpack_dict( Lectura.medir )), name="medir" )
 despachador.add_method( unpack_dict( printear ) )
 
-# Configuración del servidor
+server = Servidor("COM6")
+server.registrar_funciones(despachador)
+#despachador.add_method( deserializar_entrada(validador.validar_usuario), name="validar_usuario")
+
+# Configuracion del servidor
 HOST = '127.0.0.1'
 PORT = 5000
 
@@ -282,20 +318,22 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.listen()
 
     print(f'Servidor JSON-RPC escuchando en {HOST}:{PORT}')
-
+    log.append(f'Servidor JSON-RPC escuchando en {HOST}:{PORT}')
 
     conn, addr = s.accept()
     with conn:
         print(f'Conectado a {addr}')
+        log.append(f'Conectado a {addr}')
         while True:
             data = conn.recv(2048).decode('utf-8')
             if not data:
                 break
             
-            print("------------")
-            print(data)
             # Manejar la solicitud y enviar respuesta
             response = handle_request(data)
-            print(response)
+            if DEBUG:
+                print("------------")
+                print(data)
+                print(response)
             if response:
                 conn.sendall(json.dumps(response).encode('utf-8'))
