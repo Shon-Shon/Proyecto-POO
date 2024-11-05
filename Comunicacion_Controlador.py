@@ -88,7 +88,7 @@ class ArduinoSerialController:
     
     @classmethod
     def comando_deactGripper(clc):
-        retutn "M5"
+        return "M5"
     
     @classmethod
     def comando_home(clc):
