@@ -219,15 +219,32 @@ int main() {
             robot.mostrarMan();
         } else if (comando == "help") {
             robot.mostrarAyuda();
-        } else if (comando=="conectarIP") {
+        }
+        
+        
+        else if (comando=="conectarIP") {
             estadoIP=robot.conectarIP();
         } else if (comando=="desconectarIP"){
             estadoIP=robot.desconectarIP();
-        } else if (comando == "conectarSerie"){
-            robot.conectarSerie();
+        } 
+        
+
+        else if (comando == "conectarSerie"){
+            if (sec){
+                robot.conectarSerie();
+            } else {
+                std::cout<<"Debe registrarse para realizar esta acción"<<std::endl;
+            }
         } else if (comando == "desconectarSerie"){
-            robot.desconectarSerie(); 
-        }else if(comando=="logIn"){
+            if (sec){
+                robot.desconectarSerie();
+            } else {
+                std::cout<<"Debe registrarse para realizar esta acción"<<std::endl;
+            } 
+        }
+        
+
+        else if(comando=="logIn"){
             if (estadoIP==0){
                 while (!sec) {
                     std::cout << "Ingrese usuario: ";
@@ -242,25 +259,64 @@ int main() {
                     }
                 } 
             } else{
-                std::cout<<"Para logearse necesita estar conectado al servido IP"<<std::endl;
+                std::cout<<"Para registrarse necesita estar conectado al servido IP"<<std::endl;
             }
-        }else if (comando == "selecModo") {
-            std::cin >> modo;
-            robot.selecModo(modo);
-        } else if (comando == "encenderMotor") {
-            robot.encenderMotor();
+        }
+        
+        
+        else if (comando == "selecModo") {
+            if (sec){
+                std::cin >> modo;
+                robot.selecModo(modo);
+            } else {
+                std::cout<<"Debe registrarse para realizar esta acción"<<std::endl;
+            }  
+        } 
+        
+
+        else if (comando == "encenderMotor") {
+            if (sec){
+                robot.encenderMotor();
+            } else {
+                std::cout<<"Debe registrarse para realizar esta acción"<<std::endl;
+            }
+            
         } else if (comando == "apagarMotor") {
-            robot.apagarMotor();
-        } else if (comando == "home") {
-            robot.home();
+            if (sec){
+                robot.apagarMotor();
+            } else {
+                std::cout<<"Debe registrarse para realizar esta acción"<<std::endl;
+            }
+           
+        } 
+        
+
+        else if (comando == "home") {
+            if (sec){
+                robot.home();
+            } else {
+                std::cout<<"Debe registrarse para realizar esta acción"<<std::endl;
+            }
         } else if (comando == "exit") {
             std::cout << "Saliendo del programa." << std::endl;
             break;
-        } else if (comando == "pedirLog") {
-            std::cout << "Log del servidor:\n" << robot.pedirLog() << std::endl;
+        } 
+        
+        else if (comando == "pedirLog") {
+            if (sec){
+                std::cout << "Log del servidor:\n" << robot.pedirLog() << std::endl;
+            } else {
+                std::cout<<"Debe registrarse para realizar esta acción"<<std::endl;
+            }
         } else if (comando == "reporteGeneral") {
-            std::cout << "Reporte general:\n" << robot.reporteGeneral() << std::endl;
-        } else {
+            if (sec){
+                std::cout << "Reporte general:\n" << robot.reporteGeneral() << std::endl;
+            } else {
+                std::cout<<"Debe registrarse para realizar esta acción"<<std::endl;
+            }
+        }
+        
+        else {
             std::cout << "Comando no reconocido. Escriba 'help' para ver los comandos disponibles." << std::endl;
         }
     }
