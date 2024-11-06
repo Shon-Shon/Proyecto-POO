@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 from typing import List, Dict, Optional
 from Comunicacion_Controlador import ArduinoSerialController
+from servidor1 import Servidor
 
 class ConfigManager:
     """Clase para manejar la configuración del robot"""
@@ -122,9 +123,11 @@ class RobotCLI(cmd.Cmd):
 
         if arg.lower() == "on":
             self.config_manager.config["servidor_rpc"]["activo"] = True
+            self.servidor.start()
             print("Servidor RPC activado")
         elif arg.lower() == "off":
             self.config_manager.config["servidor_rpc"]["activo"] = False
+            self.servidor.stop()
             print("Servidor RPC desactivado")
         else:
             print("Uso: rpc [on|off]")
