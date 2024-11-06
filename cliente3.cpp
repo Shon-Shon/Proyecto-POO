@@ -22,6 +22,10 @@
 //JsonRpc
 #include <jsonrpc-lean/client.h>
 
+//En general no vamos a usar notificaciones, porque necesitamos esperar a que el servidor termine la acción antes de mandar el
+//mensaje siguiente. Alternativamente podríamos mandar el número de caractéres antes del mensaje, y así poder
+//separar los distintos pedidos y procesarlos asincronamente, pero me da paja.
+
 /* aprendizajes:
 Por alguna razón este modulo solo anda si construis Cliente en un puntero como
 Clinete* cliente = new Cliente();
@@ -42,24 +46,24 @@ public:
     
     void guardarUsuario(std::string usuario, std::string contrasenia);
     bool verificarUsuario();
-    int conectarSerie();
-    void desconectarSerie();
+    int conectarSerie();  //¿agregamos bandera?
+    void desconectarSerie(); //agregamos bandera
     
-    void selecModo(char modo);
+    void selecModo(char modo); //agregamos bandera
     
-    void encenderMotor();
-    void apagarMotor();
-    std::string moverXYZ(double x, double y, double z);
-    std::string moverXYZ(double x, double y, double z, double v);
-    void home();
+    void encenderMotor(); //agregamos bandera
+    void apagarMotor();  //agregamos bandera
+    std::string moverXYZ(double x, double y, double z); //agregamos bandera
+    std::string moverXYZ(double x, double y, double z, double v); //agregamos bandera
+    void home(); //agregamos bandera
     
     //archivos modo automatico
-    int enviarArchivo(const std::string& nombreArchivo, bool sobreescribir = false);
-    int ejecutarArchivo(const std::string& nombreArchivo);
+    int enviarArchivo(const std::string& nombreArchivo, bool sobreescribir = false);  //¿agregamos bandera? 
+    int ejecutarArchivo(const std::string& nombreArchivo);  //¿agregamos bandera?
     
     //reportes
-    std::string pedirLog();
-    std::string pedirRegistro();
+    std::string pedirLog(); //agregamos bandera
+    std::string pedirRegistro(); //agregamos bandera
     
     Cliente();
     
@@ -292,14 +296,24 @@ void Cliente::desconectarSerie(){
     #ifdef DEBUG
     std::cout<<"desconectarSerie()"<<std::endl;
     #endif
-    jsonRequest = client.BuildNotificationData("desconectarSerie");
+    jsonRequest = client.BuildRequestData("desconectarSerie");
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
-    //eliminar
-    #ifdef PLATFORM_WINDOWS
-    Sleep(100);
-    #else
-    usleep(static_cast<int>(100000)); //100 ms = 100 000 us 
-    #endif
+    
+    //Recepción de mensaje
+    int bytesRecibidos = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+    if (bytesRecibidos > 0) {
+        buffer[bytesRecibidos] = '\0'; // Asegúrate de terminar la cadena
+    } else {
+        std::cerr << "Fallo en la recepcion del mensaje:" << strerror(errno) << std::endl;
+        return;// -1;
+    }
+    jsonrpc::Response parsedResponse = client.ParseResponse(buffer);
+    // //eliminar
+    // #ifdef PLATFORM_WINDOWS
+    // Sleep(100);
+    // #else
+    // usleep(static_cast<int>(100000)); //100 ms = 100 000 us 
+    // #endif
 }
 
 void Cliente::selecModo(const char modo){
@@ -307,42 +321,72 @@ void Cliente::selecModo(const char modo){
     std::cout<<"selecModo("+std::string(1,modo)+")"<<std::endl;
     #endif
     //código para seleccionar modo
-    jsonRequest = client.BuildNotificationData("selecModo", std::string(1, modo));
+    jsonRequest = client.BuildRequestData("selecModo", std::string(1, modo));
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
-    //eliminar
-    #ifdef PLATFORM_WINDOWS
-    Sleep(100);
-    #else
-    usleep(static_cast<int>(100000)); //100 ms = 100 000 us 
-    #endif
+    
+    //Recepción de mensaje
+    int bytesRecibidos = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+    if (bytesRecibidos > 0) {
+        buffer[bytesRecibidos] = '\0'; // Asegúrate de terminar la cadena
+    } else {
+        std::cerr << "Fallo en la recepcion del mensaje:" << strerror(errno) << std::endl;
+        return;// -1;
+    }
+    jsonrpc::Response parsedResponse = client.ParseResponse(buffer);
+    // //eliminar
+    // #ifdef PLATFORM_WINDOWS
+    // Sleep(100);
+    // #else
+    // usleep(static_cast<int>(100000)); //100 ms = 100 000 us 
+    // #endif
 }
 
 void Cliente::encenderMotor(){
     #ifdef DEBUG
     std::cout<<"encenderMotor()"<<std::endl;
     #endif
-    jsonRequest = client.BuildNotificationData("encenderMotor");
+    jsonRequest = client.BuildRequestData("encenderMotor");
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);    
-    //eliminar
-    #ifdef PLATFORM_WINDOWS
-    Sleep(100);
-    #else
-    usleep(static_cast<int>(100000)); //100 ms = 100 000 us 
-    #endif
+    
+    //Recepción de mensaje
+    int bytesRecibidos = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+    if (bytesRecibidos > 0) {
+        buffer[bytesRecibidos] = '\0'; // Asegúrate de terminar la cadena
+    } else {
+        std::cerr << "Fallo en la recepcion del mensaje:" << strerror(errno) << std::endl;
+        return;// -1;
+    }
+    jsonrpc::Response parsedResponse = client.ParseResponse(buffer);
+    // //eliminar
+    // #ifdef PLATFORM_WINDOWS
+    // Sleep(100);
+    // #else
+    // usleep(static_cast<int>(100000)); //100 ms = 100 000 us 
+    // #endif
 }
 
 void Cliente::apagarMotor(){
     #ifdef DEBUG
     std::cout<<"apagarMotor()"<<std::endl;
     #endif
-    jsonRequest = client.BuildNotificationData("apagarMotor");
+    jsonRequest = client.BuildRequestData("apagarMotor");
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
-    //eliminar
-    #ifdef PLATFORM_WINDOWS
-    Sleep(100);
-    #else
-    usleep(static_cast<int>(100000)); //100 ms = 100 000 us 
-    #endif
+    
+    //Recepción de mensaje
+    int bytesRecibidos = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+    if (bytesRecibidos > 0) {
+        buffer[bytesRecibidos] = '\0'; // Asegúrate de terminar la cadena
+    } else {
+        std::cerr << "Fallo en la recepcion del mensaje:" << strerror(errno) << std::endl;
+        return;// -1;
+    }
+    jsonrpc::Response parsedResponse = client.ParseResponse(buffer);
+    // //eliminar
+    // #ifdef PLATFORM_WINDOWS
+    // Sleep(100);
+    // #else
+    // usleep(static_cast<int>(100000)); //100 ms = 100 000 us 
+    // #endif
 }
 
 std::string Cliente::moverXYZ(double x, double y, double z){
@@ -383,14 +427,24 @@ void Cliente::home(){
     #ifdef DEBUG
     std::cout<<"home()"<<std::endl;
     #endif
-    jsonRequest = client.BuildNotificationData("home");
+    jsonRequest = client.BuildRequestData("home");
     send(clientSocket, jsonRequest->GetData(), strlen(jsonRequest->GetData()), 0);
-    //eliminar
-    #ifdef PLATFORM_WINDOWS
-    Sleep(100);
-    #else
-    usleep(static_cast<int>(100000)); //100 ms = 100 000 us 
-    #endif
+    
+    //Recepción de mensaje
+    int bytesRecibidos = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+    if (bytesRecibidos > 0) {
+        buffer[bytesRecibidos] = '\0'; // Asegúrate de terminar la cadena
+    } else {
+        std::cerr << "Fallo en la recepcion del mensaje:" << strerror(errno) << std::endl;
+        return;// -1;
+    }
+    jsonrpc::Response parsedResponse = client.ParseResponse(buffer);
+    // //eliminar
+    // #ifdef PLATFORM_WINDOWS
+    // Sleep(100);
+    // #else
+    // usleep(static_cast<int>(100000)); //100 ms = 100 000 us 
+    // #endif
 }
 
 int Cliente::enviarArchivo(const std::string& nombreArchivo, bool sobreescribir){
