@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import List, Dict, Optional
 from Comunicacion_Controlador import ArduinoSerialController
 from servidor1 import Servidor
+from servidor1 import Log
 
 class ConfigManager:
     """Clase para manejar la configuración del robot"""
@@ -85,6 +86,7 @@ class RobotCLI(cmd.Cmd):
         super().__init__()
         self.config_manager = ConfigManager()
         self.robot_controller = RobotController(self.config_manager)
+        self.log_manager = Log()  # Instancia de la clase Log
         self.is_admin = False
         self.trajectory_folder = "trayectorias"
         os.makedirs(self.trajectory_folder, exist_ok=True)
@@ -135,16 +137,25 @@ class RobotCLI(cmd.Cmd):
     def do_log(self, arg):
         """Mostrar las últimas 100 líneas del log"""
         if not self.is_admin:
-            print("Se requieren privilegios de administrador")
-            return
+         print("Se requieren privilegios de administrador")
+        return
 
-        try:
-            with open("server_log.json", 'r') as f: #aca cambiar el nombre al archivo del log del servidor
-                logs = json.load(f)
-                for log in logs[-100:]:
-                    print(f"{log['timestamp']}: {log['message']}")
-        except FileNotFoundError:
-            print("Archivo de log no encontrado")
+    try:
+            # Obtenemos el iterador del log
+            log_lines = self.log_manager.get_log_general()
+            
+            # Convertimos el iterador a lista y tomamos las últimas 100 líneas
+            lines = list(log_lines)
+            last_lines = lines[-100:] if len(lines) > 100 else lines
+            
+            # Imprime las líneas
+            print("\nÚltimas líneas del log:")
+            for line in last_lines:
+                print(line.strip())  # strip() elimina espacios y saltos de línea extra
+                
+    except Exception as e:
+            print(f"Error al leer el log: {e}")
+    
 
     def do_connect(self, arg):
         """Conectar con el robot"""
