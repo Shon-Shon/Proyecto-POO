@@ -11,11 +11,49 @@ import threading
 #Este hay que sacarlo después
 import inspect
 import Comunicacion_Controlador
+from collections import deque
+from datetime import datetime
 
+#ArduinoSerialController
 DEBUG=True
 
 log=[]
 registro=[]
+
+class Log:
+    def __init__(self, archivo_conexion="log_conexion.txt", archivo_general="log_general.txt"):
+        self.archivo_conexion = archivo_conexion
+        self.archivo_general = archivo_general
+        self.log_conexion = deque()
+        self.log_general = deque()
+    
+    def logeo_general(self, elemento, write_time = True):
+        if write_time:
+            self.log_general.append(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
+        self.log_general.append(elemento)
+    
+    def logeo_conexion(self, elemento, write_time = True):
+        if write_time:
+            self.log_conexion.append(datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
+        self.log_conexion.append(elemento)
+    
+    def get_log_general(self):
+        return iter(self.log_general)
+    
+    def get_log_conexion(self):
+        return iter(self.log_conexion)
+    
+    def guardar_log_general(self):
+        with open(self.archivo_general,"a") as archivo:
+            for i in self.log_general:
+                archivo.write(str(i)+"\n")
+    
+    def guardar_log_conexion(self):
+        with open(self.archivo_conexion,"a") as archivo:
+            for i in self.log_conexion:
+                archivo.write(str(i)+"\n")
+
+log = Log()
 
 def unpack_dict(func):
     @functools.wraps(func)
@@ -41,24 +79,6 @@ def add(x, y):
 def subtract(x, y):
     return x - y
 
-
-class Validador_usuarios:
-    def __init__(self, archivo="usuarios.csv"):
-        self.archivo_usuarios = archivo
-    
-    def validar_usuario(self, user):
-        if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
-        with open(self.archivo_usuarios, 'rb', 0) as file, \
-            mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_READ) as s:
-            posicion = re.search(br'^' + user.usuario.encode('utf-8') + br';[^\n]*?\n',s)
-            if posicion != None:
-                s.seek(posicion.start()+len(user.usuario)+1)
-                cont = s.readline().strip()
-                if cont.decode('utf-8') == user.contrasenia:
-                    log.append(f"Accedio el usuario {user.usuario}")
-                    return True
-            log.append(f"Se intento acceder con la cuenta de {user.usuario}")
-            return False
 
 def es_builtin(obj): return isinstance(obj, (int, float, str, list, dict, set, tuple, bool, bytes))
 
@@ -156,42 +176,42 @@ class Gestor_controlador:
     
     def selecModo(self, modo_deseado):
         if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
-        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}({modo_deseado})")
+        log.logeo_general(f"Se ejecuto {inspect.currentframe().f_code.co_name}({modo_deseado})")
         self.modo = modo_deseado
     
     def conectarSerie(self):
         if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
-        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
+        log.logeo_general(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
         if not self.controlador.connection:
             self.controlador.connect()
         if not self.controlador.connection:
-            registro.append("Error: 1")
+            log.logeo_general("Error: 1",write_time=False)
             return 1
         return 0
     
     def desconectarSerie(self):
         if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
-        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
+        log.logeo_general(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
         self.controlador.disconnect()
         self.controlador.connection = None
     
     def encenderMotor(self):
         if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
-        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
+        log.logeo_general(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
         #print("¡Brum Brum!")
         orden = self.controlador.comando_encenderMotor()
         respuesta = self.controlador.send_gcode(orden)
         
     def apagarMotor(self):
         if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
-        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
+        log.logeo_general(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
         #print("PIIUuuu..")
         orden = self.controlador.comando_apagarMotor()
         respuesta = self.controlador.send_gcode(orden)
     
     def moverXYZ(self, x,y,z,v=-1):
         if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
-        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}({x},{y},{z},{v})")
+        log.logeo_general(f"Se ejecuto {inspect.currentframe().f_code.co_name}({x},{y},{z},{v})")
         if v==-1: v=2
         orden = self.controlador.comando_moverXYZ(x,y,z,v)
         respuesta = self.controlador.send_gcode(orden)
@@ -199,41 +219,41 @@ class Gestor_controlador:
     
     def home(self):
         if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
-        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
+        log.logeo_general(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
         orden = self.controlador.comando_home()
         respuesta = self.controlador.send_gcode(orden)
     
     def actGripper(self):
         if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
-        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
+        log.logeo_general(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
         orden = self.controlador.comando_actGripper()
         respuesta = self.controlador.send_gcode(orden)
         
     def deactGripper(self):
         if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
-        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
+        log.logeo_general(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
         orden = self.controlador.comando_deactGripper()
         respuesta = self.controlador.send_gcode(orden)
     
     def recibirArchivo(self, nombre_archivo, sobreescribir=False):
         if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
-        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}({nombre_archivo},{sobreescribir})")
+        log.logeo_general(f"Se ejecuto {inspect.currentframe().f_code.co_name}({nombre_archivo},{sobreescribir})")
         if self.archivo != None:
-            registro.append("Error: 2")
+            log.logeo_general("Error: 2",write_time=False)
             return 2
         if os.path.splitext(nombre_archivo)[1] != ".gcode":
-            registro.append("Error: 3")
+            log.logeo_general("Error: 3",write_time=False)
             return 3
         direccion = os.path.join("G_Codes",nombre_archivo)
         if os.path.isfile(direccion) and sobreescribir==False:
-            registro.append("Warning: 1")
+            log.logeo_general("Warning: 1",write_time=False)
             return 1
         self.nombreArchivo = nombre_archivo
         self.archivo = open(direccion, 'wb')
         return 0
     
     def seguir_recibiendo_archivo(self, fragmento):
-        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}([fragmento de archivo])")
+        log.logeo_general(f"Se ejecuto {inspect.currentframe().f_code.co_name}([fragmento de archivo])")
         if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
         fragmento_bin = fragmento.encode()
         #Acá hay que verificar que el archivo exista y esté abierto
@@ -241,37 +261,37 @@ class Gestor_controlador:
         
     def terminar_recibir_archivo(self):
         if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
-        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
+        log.logeo_general(f"Se ejecuto {inspect.currentframe().f_code.co_name}")
         if self.archivo:
             self.archivo.close()
         self.archivo = None
     
     def ejecutarArchivo(self, nombre_archivo):
         if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
-        registro.append(f"Se ejecuto {inspect.currentframe().f_code.co_name}({nombre_archivo})")
+        log.logeo_general(f"Se ejecuto {inspect.currentframe().f_code.co_name}({nombre_archivo})")
         if "." not in nombre_archivo: nombre_archivo += ".gcode"
         direccion = os.path.join("G_Codes",nombre_archivo)
         if not os.path.isfile(direccion):
-            registro.append("Error: 1")
+            log.logeo_general("Error: 1",write_time=False)
             return 1
         with open(direccion, "r") as archivo:
             orden = archivo.readline().strip()
             resultado = "\n".join(self.controlador.send_gcode(orden))
             #resultado = "Lalala"
             if "ERROR" in resultado:
-                registro.append("Error: 2")
+                log.logeo_general("Error: 2",write_time=False)
                 return 2
         return 0
     
     def pedirLog(self):
         if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
-        registro.append(f"Se ejecuto{inspect.currentframe().f_code.co_name}")
-        return "\n".join(log)
+        log.logeo_general(f"Se ejecuto{inspect.currentframe().f_code.co_name}")
+        return "\n".join(log.get_log_conexion())
     
     def pedirRegistro(self):
         if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
-        salida = "\n".join(registro)
-        registro.append(f"Se ejecuto{inspect.currentframe().f_code.co_name}")
+        salida = "\n".join(log.get_log_general())
+        log.logeo_general(f"Se ejecuto{inspect.currentframe().f_code.co_name}")
         return salida
     
     def registrar_funciones(self, despachador):
@@ -318,7 +338,7 @@ class Servidor:
             conn, addr = s.accept()
             with conn:
                 print(f'Conectado a {addr}')
-                log.append(f'Conectado a {addr}')
+                log.logeo_conexion(f'Conectado a {addr}')
                 while not self.stop_event.is_set():
                     data = conn.recv(2048).decode('utf-8')
                     if not data:
@@ -364,10 +384,10 @@ class Servidor:
                 s.seek(posicion.start()+len(user.usuario)+1)
                 cont = s.readline().strip()
                 if cont.decode('utf-8') == user.contrasenia:
-                    log.append(f"Accedio el usuario {user.usuario}")
+                    log.logeo_conexion(f"Accedio el usuario {user.usuario}")
                     self.user_verified = True
                     return True
-            log.append(f"Se intento acceder con la cuenta de {user.usuario}")
+            log.logeo_conexion(f"Se intento acceder con la cuenta de {user.usuario}")
             return False
 
 class AdminInterface:
@@ -381,15 +401,11 @@ class AdminInterface:
                 self.stop_event.set()
                 print("Comando de parada recibido. Deteniendo el servidor...")
 
-validador = Validador_usuarios()
 
 despachador.add_method( serializar_salida(unpack_dict( Lectura.medir )), name="medir" )
 despachador.add_method( unpack_dict( printear ) )
-validador = Validador_usuarios()
-despachador.add_method(deserializar_entrada(validador.validar_usuario), name="validar_usuario")
 
 gestor_cont = Gestor_controlador("COM6")
-gestor_cont.registrar_funciones(despachador)
 
 stop_event = threading.Event()
 server = Servidor(stop_event, gestor_cont)
@@ -399,4 +415,6 @@ server.start()
 admin_interface.start()
 
 server.stop()
+log.guardar_log_conexion()
+log.guardar_log_general()
 print("El servidor ha sido detenido completamente.")
