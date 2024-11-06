@@ -293,13 +293,22 @@ class Gestor_controlador:
         despachador.add_method(self.pedirRegistro)
 
 class Servidor:
-    def __init__(self, stop_event, gestor_cont, HOST = '127.0.0.1', PORT = 5000,):
+    def __init__(self, stop_event, gestor_cont, HOST = '127.0.0.1', PORT = 5000, archivo_usuarios="usuarios.csv"):
         # Inicializamos la clase con un evento de parada
         self.stop_event = stop_event
         self.server_thread = None
         self.gestor_cont = gestor_cont
-        self.HOST=HOST
-        self.PORT=PORT
+        self.despachador_verificado = Dispatcher()
+        self.despachador_no_verificado = Dispatcher()
+        self.HOST = HOST
+        self.PORT = PORT
+        self.archivo_usuarios = archivo_usuarios
+        #self.validador = Validador_usuarios()
+        self.user_verified = False
+        
+        self.gestor_cont.registrar_funciones(self.despachador_verificado)
+        self.despachador_verificado.add_method(deserializar_entrada(self.validar_usuario))
+        self.despachador_no_verificado.add_method(deserializar_entrada(self.validar_usuario))
     
     def run(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -336,18 +345,30 @@ class Servidor:
         self.server_thread.join()
     
     def handle_request(self, request_str):
-        #if self.user_verif:
-        response = JSONRPCResponseManager.handle(request_str, despachador)
-        # else:
-        #     try:
-        #         data = json.loads(request_str)
-        #     except (TypeError, ValueError):
-        #         return jsonrpc.jsonrpc2.JSONRPC20Response(error=jsonrpc.exeptions.JSONRPCParseError()._data)
-        #     if data.method != "validar_usuario"
-        #         return 
+        #response = JSONRPCResponseManager.handle(request_str, despachador)
+        if self.user_verified:
+            response = JSONRPCResponseManager.handle(request_str, self.despachador_verificado)
+            #self.user_verif = False
+        else:
+            response = response = JSONRPCResponseManager.handle(request_str, self.despachador_no_verificado)
         if response:
             return response.data
         return None
+    
+    def validar_usuario(self, user):
+        if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
+        with open(self.archivo_usuarios, 'rb', 0) as file, \
+            mmap.mmap(file.fileno(), 0, access=mmap.ACCESS_READ) as s:
+            posicion = re.search(br'^' + user.usuario.encode('utf-8') + br';[^\n]*?\n',s)
+            if posicion != None:
+                s.seek(posicion.start()+len(user.usuario)+1)
+                cont = s.readline().strip()
+                if cont.decode('utf-8') == user.contrasenia:
+                    log.append(f"Accedio el usuario {user.usuario}")
+                    self.user_verified = True
+                    return True
+            log.append(f"Se intento acceder con la cuenta de {user.usuario}")
+            return False
 
 class AdminInterface:
     def __init__(self, stop_event):
