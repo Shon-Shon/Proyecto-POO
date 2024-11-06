@@ -144,7 +144,7 @@ def printear(*args):
     return salida
 
 
-class Servidor:
+class Gestor_controlador:
     def __init__(self, puertoSerie="COM6"):
         if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
         self.controlador = Comunicacion_Controlador.ArduinoSerialController(puertoSerie)
