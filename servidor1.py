@@ -7,6 +7,7 @@ import functools
 import mmap
 import re
 import os
+import threading
 #Este hay que sacarlo después
 import inspect
 import Comunicacion_Controlador
@@ -146,7 +147,6 @@ def printear(*args):
 class Servidor:
     def __init__(self, puertoSerie="COM6"):
         if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
-        self.validador = Validador_usuarios()
         self.controlador = Comunicacion_Controlador.ArduinoSerialController(puertoSerie)
         self.modo = "m"
         self.archivo = None
@@ -276,7 +276,6 @@ class Servidor:
     
     def registrar_funciones(self, despachador):
         if DEBUG: print("Se ejecuto",inspect.currentframe().f_code.co_name)
-        despachador.add_method(deserializar_entrada(self.validador.validar_usuario), name="validar_usuario")
         despachador.add_method(self.selecModo)
         despachador.add_method(self.conectarSerie)
         despachador.add_method(self.desconectarSerie)
@@ -293,47 +292,90 @@ class Servidor:
         despachador.add_method(self.pedirLog)
         despachador.add_method(self.pedirRegistro)
 
+class Servidor:
+    def __init__(self, stop_event, gestor_cont, HOST = '127.0.0.1', PORT = 5000,):
+        # Inicializamos la clase con un evento de parada
+        self.stop_event = stop_event
+        self.server_thread = None
+        self.gestor_cont = gestor_cont
+        self.HOST=HOST
+        self.PORT=PORT
+    
+    def run(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind((self.HOST, self.PORT))
+            s.listen()
+            print(f'Servidor JSON-RPC escuchando en {self.HOST}:{self.PORT}')
+            conn, addr = s.accept()
+            with conn:
+                print(f'Conectado a {addr}')
+                log.append(f'Conectado a {addr}')
+                while not self.stop_event.is_set():
+                    data = conn.recv(2048).decode('utf-8')
+                    if not data:
+                        break
+                    
+                    # Manejar la solicitud y enviar respuesta
+                    response = self.handle_request(data)
+                    if DEBUG:
+                        print("------------")
+                        print(data)
+                        print(response)
+                    if response:
+                        conn.sendall(json.dumps(response).encode('utf-8'))
+                print("Servidor detenido.")
+    
+    def start(self):
+        # Iniciamos el servidor en un hilo separado
+        self.server_thread = threading.Thread(target=self.run)
+        self.server_thread.start()
+    
+    def stop(self):
+        # Detenemos el servidor
+        self.stop_event.set()
+        self.server_thread.join()
+    
+    def handle_request(self, request_str):
+        #if self.user_verif:
+        response = JSONRPCResponseManager.handle(request_str, despachador)
+        # else:
+        #     try:
+        #         data = json.loads(request_str)
+        #     except (TypeError, ValueError):
+        #         return jsonrpc.jsonrpc2.JSONRPC20Response(error=jsonrpc.exeptions.JSONRPCParseError()._data)
+        #     if data.method != "validar_usuario"
+        #         return 
+        if response:
+            return response.data
+        return None
+
+class AdminInterface:
+    def __init__(self, stop_event):
+        self.stop_event = stop_event
+
+    def start(self):
+        while not self.stop_event.is_set():
+            command = input("Escribe 'stop' para detener el servidor: ")
+            if command.lower() == "stop":
+                self.stop_event.set()
+                print("Comando de parada recibido. Deteniendo el servidor...")
+
+validador = Validador_usuarios()
 
 despachador.add_method( serializar_salida(unpack_dict( Lectura.medir )), name="medir" )
 despachador.add_method( unpack_dict( printear ) )
+validador = Validador_usuarios()
+despachador.add_method(deserializar_entrada(validador.validar_usuario), name="validar_usuario")
 
-server = Servidor("COM6")
-server.registrar_funciones(despachador)
-#despachador.add_method( deserializar_entrada(validador.validar_usuario), name="validar_usuario")
+gestor_cont = Gestor_controlador("COM6")
+gestor_cont.registrar_funciones(despachador)
 
-# Configuracion del servidor
-HOST = '127.0.0.1'
-PORT = 5000
+stop_event = threading.Event()
+server = Servidor(stop_event, gestor_cont)
+admin_interface = AdminInterface(stop_event)
 
-def handle_request(data):
-    # Procesar la solicitud JSON-RPC
-    response = JSONRPCResponseManager.handle(data, despachador)
-    if response:
-        return response.data
-    return None
+server.start()
+admin_interface.start()
 
-# Crear el socket del servidor
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    s.bind((HOST, PORT))
-    s.listen()
-
-    print(f'Servidor JSON-RPC escuchando en {HOST}:{PORT}')
-    log.append(f'Servidor JSON-RPC escuchando en {HOST}:{PORT}')
-
-    conn, addr = s.accept()
-    with conn:
-        print(f'Conectado a {addr}')
-        log.append(f'Conectado a {addr}')
-        while True:
-            data = conn.recv(2048).decode('utf-8')
-            if not data:
-                break
-            
-            # Manejar la solicitud y enviar respuesta
-            response = handle_request(data)
-            if DEBUG:
-                print("------------")
-                print(data)
-                print(response)
-            if response:
-                conn.sendall(json.dumps(response).encode('utf-8'))
+server.stop()
+print("El servidor ha sido detenido completamente.")
